@@ -5,6 +5,9 @@ __lua__
 
 local cam,scl,wf,t={},3,false,0
 local norms,fcntrs,fnorms={},{},{}
+--
+local v_up={0,1,0}
+
 local vrtx={
  {-48,4,16},{-16,4,16},{-16,4,0},{-48,4,0},
  {-16,0,16},{-16,0,0},{-48,0,0},
@@ -84,16 +87,33 @@ function init_cam()
  return {
   pos={0,48,-56},
   ang=0.25,
+  m={},
+  --move forward
   mf=function(self,v)
    local p,a=self.pos,self.ang
    p[1]=p[1]+cos(a)*v
    p[3]=p[3]-sin(a)*v
    self.pos=p
   end,
+  --side back
   sb=function(self,v)
    local p,a=self.pos,self.ang
    p[1]=p[1]-cos(a)*v
    p[3]=p[3]+sin(a)*v
+   self.pos=p
+  end,
+  --strafe left
+  sl=function(self,v)
+   local p,a=self.pos,self.ang
+   p[1]=p[1]-cos(a-0.25)*v
+   p[3]=p[3]+sin(a-0.25)*v
+   self.pos=p
+  end,
+  --strafe right
+  sr=function(self,v)
+   local p,a=self.pos,self.ang
+   p[1]=p[1]-cos(a+0.25)*v
+   p[3]=p[3]+sin(a+0.25)*v
    self.pos=p
   end,
   projiso=function(self,vrtx)
@@ -107,17 +127,33 @@ function init_cam()
    end
    return vert
   end,
+  upd_m=function(self)
+-- local m_camroty=m_makeroty(cam.a)
+--	local v_lookdir=m_x_v(m_camroty,{0,0,1})
+--	local v_target=v_add(cam.pos,v_lookdir)
+
+    local m_vw=
+     make_m_from_v_angle(v_up,self.ang)
+    m_vw[13],m_vw[14],m_vw[15]=
+     self.pos[1],self.pos[2],self.pos[3]
+    --2 m_inv(m_vw)
+    m_qinv(m_vw)
+    self.m=m_vw
+    --2 self.m=m_x_m(m_vw,{
+    --2  1,0,0,0,
+    --2  0,1,0,0,
+    --2  0,0,1,0,
+    --2  -self.pos[1],-self.pos[2],-self.pos[3],1
+    --2 })
+  end,
   proj=function(self,vrtx)
    local vert={}
    for i=1,#vrtx do 
     local v=vrtx[i]
-    local x,y,z=v[1]-self.pos[1],
-     v[2]-self.pos[2],
-     v[3]-self.pos[3]
-    local w=63.5/z
+    local w=63.5/v[3]
     vert[i]={
-     63.5+flr(w*x),
-     63.5-flr(w*y)
+     63.5+flr(w*v[1]),
+     63.5-flr(w*v[2])
     }
    end
    return vert
@@ -156,31 +192,38 @@ function _init()
 end
 function _update()
  t+=0.01
- if (btn(⬆️)) cam:mf(0.5)
- if (btn(⬇️)) cam:sb(0.5)
- if (btn(⬅️)) cam.ang-=0.01
- if (btn(➡️)) cam.ang+=0.01
- if (btn(⬆️,1)) cam.pos[2]+=1
- if (btn(⬇️,1)) cam.pos[2]-=1
+ if (btn(⬆️,1)) cam:mf(1.25)
+ if (btn(⬇️,1)) cam:sb(1.25)
+ if (btn(⬅️)) cam.ang+=0.005
+ if (btn(➡️)) cam.ang-=0.005
+ if (btn(⬆️)) cam.pos[2]+=1
+ if (btn(⬇️)) cam.pos[2]-=1
+ if (btn(⬅️,1)) cam:sl(1.25)
+ if (btn(➡️,1)) cam:sr(1.25)
  if (btnp(❎)) wf=not wf
 end
 
 function _draw()
  cls""
- -- transformation
+ -- model transformation
 	//ftheta += 1.0f * felapsedtime; // uncomment to spin me right round baby right round
 	local m_rotz,m_roty,m_tran=
 	 m_makerotz(1),
-	 m_makeroty(t*0.25),
+	 m_makeroty(0),--t*0.25
   m_maketran(0,0,0)
 
  m_wrld={1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1}
 	m_wrld=m_x_m(m_rotz,m_roty)
 	m_wrld=m_x_m(m_wrld,m_tran)
 	
-	local v_wrld={}
+	-- camera
+ cam:upd_m()
+	local v_view,v_wrld={},{}
+	
 	for v in all(vrtx) do
-	 add(v_wrld,m_x_v(m_wrld,v))
+ 	local tmp=m_x_v(m_wrld,v)
+	 add(v_wrld,tmp)
+  add(v_view,m_x_v(cam.m,tmp))
 	end
 	
 	--should be usefull only for
@@ -188,12 +231,12 @@ function _draw()
 	init_norm(v_wrld)
 	
  -- proj
- local proj=cam:proj(v_wrld)
- local pcntr=cam:proj(fcntrs)
- local pnorm=cam:proj(fnorms)
+ local proj=cam:proj(v_view)
+-- local pcntr=cam:proj(fcntrs)
+-- local pnorm=cam:proj(fnorms)
 
 
- -- testing visibles
+ -- tofix testing visibles
  local vistris={}
  for i=1,#tris,4 do
   local idx=(i-1)/4+1
@@ -212,8 +255,7 @@ function _draw()
  -- sorting visible tris
  shellsort(vistris)
  
- --local lgt={0,0,1}
- local a=cam.ang
+ --light
  local lgt={1,-1,1} 
  v_normz(lgt)
 
@@ -343,10 +385,23 @@ end
 function v_dot(a,b)
  return a[1]*b[1]+a[2]*b[2]+a[3]*b[3]
 end
+function m_qinv(m)
+ m[2],m[5]=m[5],m[2]
+ m[3],m[9]=m[9],m[3]
+ m[7],m[10]=m[10],m[7]
+ local px,py,pz=
+  m[13],m[14],m[15]
+ m[13],m[14],m[15]=
+  -(px*m[1]+py*m[5]+pz*m[9]),
+  -(px*m[2]+py*m[6]+pz*m[10]),
+  -(px*m[3]+py*m[7]+pz*m[11])
+end
+function m_inv(m)
+ m[2],m[5]=m[5],m[2]
+ m[3],m[9]=m[9],m[3]
+ m[7],m[10]=m[10],m[7]
+end
 
-
---
-local v_up={0,1,0}
 -- matrix x vector
 function m_x_v(m,v)
  local x,y,z=v[1],v[2],v[3]
@@ -399,6 +454,19 @@ function m_maketran(x,y,z)
   0,1,0,0,
   0,0,1,0,
   x,y,z,1
+ }
+end
+
+function make_m_from_v_angle(up,ang)
+ local fwd={cos(ang),0,-sin(ang)}
+ local right=v_cross(up,fwd)
+ v_normz(right)
+ fwd=v_cross(right,up)
+ return {
+  right[1],right[2],right[3],0,
+  up[1],up[2],up[3],0,
+  fwd[1],fwd[2],fwd[3],0,
+  0,0,0,1
  }
 end
 -->8
