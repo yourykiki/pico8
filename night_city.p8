@@ -8,7 +8,7 @@ local norms,fcntrs,fnorms={},{},{}
 --
 local v_up={0,1,0}
 local vrtx={}
-local max_vrtx,nb_clip
+local max_vrtx,nb_clip=0,0
 local tris={}
 
 local dith={
@@ -130,10 +130,25 @@ end
 function _init()
  cam=init_cam()
  nbvrt=#vrtx
- local m=make_bld_sm({0,0,0},{24,32,16})
- vrtx,tris=m.vrtx,m.tris
- max_vrtx=#vrtx
+ local m=make_bld_sm({280,0,240},{24,24,16},0.25)
+	add_model(m)
+ m=make_bld_sm({280,0,208},{24,24,16},0.25)
+	add_model(m)
  --init_norm(vrtx)
+end
+function add_model(mdl)
+print("max_vrtx"..max_vrtx)
+ for k,v in pairs(mdl.vrtx) do
+	 vrtx[k+max_vrtx]=v
+ end
+ local nbt,mtris=#tris,mdl.tris
+ for i=1,#mtris,4 do
+	 tris[nbt+i]=mtris[i]+max_vrtx
+	 tris[nbt+i+1]=mtris[i+1]+max_vrtx
+	 tris[nbt+i+2]=mtris[i+2]+max_vrtx
+	 tris[nbt+i+3]=mtris[i+3]
+ end
+ max_vrtx=#vrtx
 end
 function _update()
  t+=0.01
@@ -541,7 +556,9 @@ function shellsort(a)
 end
 -->8
 --local max_vrtx,nb_clip=#vrtx
-local col1,col2,col3=0x54,0x4f,0x55
+local col1,col2,col3,m4ident=
+ 0x54,0x4f,0x55,
+ {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1}
 local vrtx={
  {-48,4,16},{-16,4,16},{-16,4,0},{-48,4,0}
 }
@@ -550,24 +567,18 @@ local tris={
  1,2,3,col1, 1,3,4,col1
 }
 
-function make_bld_sm(pos,siz)
- local px,py,pz,sx,sy,sz=
-  pos[1],pos[2],pos[3],
+function make_bld_sm(pos,siz,roty)
+ local sx,sy,sz=
   siz[1]/2,siz[2],siz[3]/2
- local vrtx={
-  {-sx+px,py,-sz+pz},
-  {sx+px,py,-sz+pz},
-  {sx+px,py,sz+pz},
-  {-sx+px,py,sz+pz},
-  {-sx+px,sy+py,-sz+pz},
-  {sx+px,sy+py,-sz+pz},
-  {sx+px,sy+py,sz+pz},
-  {-sx+px,sy+py,sz+pz},
-
-  {-sx+px,sy*1.3+py,pz},
-  {sx+px,sy*1.3+py,pz}
+ local lvrtx={
+  {-sx,0,-sz},{sx,0,-sz},
+  {sx,0,sz},{-sx,0,sz},
+  {-sx,sy,-sz},{sx,sy,-sz},
+  {sx,sy,sz},{-sx,sy,sz},
+  {-sx,sy*1.3,0},
+  {sx,sy*1.3,0}
  }
- local tris={
+ local ltris={
   1,5,2,col1, 5,6,2,col1,
   2,6,3,col1, 6,7,3,col1,
   3,7,4,col1, 7,8,4,col1,
@@ -577,11 +588,28 @@ function make_bld_sm(pos,siz)
   7,10,8,col2, 8,10,9,col2
  }
 
+ transform(lvrtx,
+  pos[1],pos[2],pos[3],roty)
+ 
  return {
-  vrtx=vrtx,
-  tris=tris
+  vrtx=lvrtx,
+  tris=ltris
  }
 end
+
+function transform(lvrtx,px,py,pz,roty)
+ local m_roty,m_tran=
+  m_makeroty(roty),
+  m_maketran(px,py,pz)
+
+ m_wrld=m4ident
+ m_wrld=m_x_m(m_wrld,m_tran)
+ m_wrld=m_x_m(m_wrld,m_roty)
+ for i,v in pairs(lvrtx) do
+  lvrtx[i]=m_x_v(m_wrld,v)
+ end
+end
+
 __gfx__
 60006000606060606060606060606060666066606666666666666666666666666000600066006600660066606660666066666666666666666666666666666666
 00000000000000000600060006060606060606060606060666066606666666660000000000000000000000000600060006000600060606060666066666666666
