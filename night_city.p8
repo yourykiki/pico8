@@ -26,8 +26,8 @@ local dith2={
 
 function init_cam()
  return {
-  pos={0,48,-56},
-  ang=0.25,
+  pos={0,32,0},
+  ang=0.125,
   m={},
   --move forward
   mf=function(self,v)
@@ -133,6 +133,10 @@ function _init()
  local m=make_bld_sm({280,0,240},{24,24,16},0.25)
 	add_model(m)
  m=make_bld_sm({280,0,208},{24,24,16},0.25)
+	add_model(m)
+	m=make_river()
+	add_model(m)
+	m=make_hill()
 	add_model(m)
  --init_norm(vrtx)
 end
@@ -556,16 +560,15 @@ function shellsort(a)
 end
 -->8
 --local max_vrtx,nb_clip=#vrtx
-local col1,col2,col3,m4ident=
- 0x54,0x4f,0x55,
+local col1,col2,col3,col4,col5,m4ident=
+ 0x54,0x4f,0x55,0x1c,0x53,
  {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1}
-local vrtx={
- {-48,4,16},{-16,4,16},{-16,4,0},{-48,4,0}
-}
-
-local tris={
- 1,2,3,col1, 1,3,4,col1
-}
+--local vrtx={
+-- {-48,4,16},{-16,4,16},{-16,4,0},{-48,4,0}
+--}
+--local tris={
+-- 1,2,3,col1, 1,3,4,col1
+--}
 
 function make_bld_sm(pos,siz,roty)
  local sx,sy,sz=
@@ -610,6 +613,87 @@ function transform(lvrtx,px,py,pz,roty)
  end
 end
 
+function make_river()
+ local lvrtx={
+ }
+ for i=512,256,-64 do
+  add(lvrtx,{192,0,i})
+  add(lvrtx,{256,0,i})
+ end
+ add(lvrtx,{192,0,208})--11
+ add(lvrtx,{176,0,192})
+ add(lvrtx,{192,0,192})
+ add(lvrtx,{256,0,192})
+ add(lvrtx,{252,0,160})--15
+ add(lvrtx,{224,0,132})
+ add(lvrtx,{192,0,128})
+ for i=128,0,-64 do --18
+  add(lvrtx,{i,0,192})
+  add(lvrtx,{i,0,128})
+ end
+ local ltris={
+  1,2,4,col4, 1,4,3,col4,
+  3,4,6,col4, 3,6,5,col4,
+  5,6,8,col4, 5,8,7,col4,
+  7,8,10,col4, 7,10,9,col4,
+  
+  9,10,14,col4, 9,14,11,col4,
+  12,11,13,col4, 11,14,13,col4,
+  13,14,15,col4, 13,15,16,col4,
+  13,16,17,col4, 12,13,17,col4,
+  18,12,17,col4, 18,17,19,col4,
+
+  18,19,20,col4, 20,19,21,col4,
+  20,21,22,col4, 22,21,23,col4,
+  
+ }
+
+ return {
+  vrtx=lvrtx,
+  tris=ltris
+ }
+end
+
+function make_hill()
+ local alt={128,104,64,0,
+  128,104,64,0, 128,104,64,0,
+  104,104,64,0, 64,64,64,0,
+  0,0,0,0
+ }
+ local lvrtx={
+ }
+ for i=512,192,-64 do
+  for j=0,192,64 do
+   add(lvrtx,{j,alt[#lvrtx+1],i})
+  end
+ end
+ --ex
+ lvrtx[24]={168,0,216}
+ 
+ local ltris={
+  1,2,6,col5, 1,6,5,col5,--
+  2,3,7,col5, 2,7,6,col5,
+  3,4,8,col5, 3,8,7,col5,
+  5,6,10,col5, 5,10,9,col5,--
+  6,7,11,col5, 6,11,10,col5,
+  7,8,12,col5, 7,12,11,col5,
+  9,10,14,col5, 9,14,13,col5,--
+  10,11,15,col5, 10,15,14,col5,
+  11,12,16,col5, 11,16,15,col5,
+  13,14,18,col5, 13,18,17,col5,--
+  14,15,19,col5, 14,19,18,col5,
+  15,16,20,col5, 15,20,19,col5,
+  17,18,22,col5, 17,22,21,col5,--
+  18,19,23,col5, 18,23,22,col5,
+  19,20,24,col5, 19,24,23,col5,
+  
+ }
+
+ return {
+  vrtx=lvrtx,
+  tris=ltris
+ }
+end
 __gfx__
 60006000606060606060606060606060666066606666666666666666666666666000600066006600660066606660666066666666666666666666666666666666
 00000000000000000600060006060606060606060606060666066606666666660000000000000000000000000600060006000600060606060666066666666666
