@@ -3,7 +3,7 @@ version 18
 __lua__
 -- temple corridor demo
 -- @yourykiki
-
+local cpu={}
 local cam,scl,wf,t={},3,false,0
 --
 local v_up={0,1,0}
@@ -251,6 +251,7 @@ function add_model(mdl)
 end
 
 function _update()
+resetcpu()
  t+=0.01
  local btu,btd=btn(⬆️,1),btn(⬇️,1)
  local btsl,btsr=btn(⬅️,1),btn(➡️,1)
@@ -268,9 +269,10 @@ function _update()
  if (not btsl and not btsr) cam:sstp()
  if (not btll and not btlr) cam:lstp()
  cam:move()
- 
+ cpu["1-b_curnod"]=curcpu()
  -- on which node camera is ?
  curnod=get_curnod(cam.pos,curnod)
+ cpu["2-curnod"]=curcpu()
 end
 
 function _draw()
@@ -287,6 +289,7 @@ function _draw()
  m_wrld=m_x_m(m_wrld,m_tran)
 	
 	-- camera
+ cpu["3-b_transf"]=curcpu()
  cam:upd_m()
  local v_view,v_wrld={},{}
 	
@@ -295,6 +298,7 @@ function _draw()
   add(v_wrld,tmp)
   add(v_view,m_x_v(cam.m,tmp))
  end
+ cpu["4-transf"]=curcpu()
 	
  --should be usefull only for
  --rotating objects, so it
@@ -305,7 +309,8 @@ function _draw()
  nb_clip=0
  local vistris,nodtris=
   {},getnodtris(curnod) 
-
+ cpu["5-getnodtris"]=curcpu()
+--print(#nodtris.tris,32,96)
  local _tris,_norms=
   nodtris.tris,nodtris.norms
  for i=1,#_tris,4 do
@@ -337,13 +342,16 @@ function _draw()
    end
   end 
  end
- 
+ cpu["6-det_visible"]=curcpu()
+
  -- proj
  local proj=cam:proj(v_view)
+ cpu["7-proj"]=curcpu()
 
  -- sorting visible tris
  shellsort(vistris)
- 
+ cpu["8-sortvistris"]=curcpu()
+
  --light
  local lgt={1,-1,0} 
  v_normz(lgt)
@@ -385,6 +393,9 @@ function _draw()
   end
   
  end
+ 
+ cpu["9-filltris"]=curcpu()
+
  -- test dither
  for i=1,#dith2 do
   color(0x54)
@@ -397,7 +408,11 @@ function _draw()
    " tris visible "
    ..#vistris.." "..curnod.id
    .."v"..cam.avel
-   ,0,0,7)  
+   ,0,0,7) 
+ print""
+ for k,v in pairs(cpu) do
+  print(k.."  "..v)
+ end
 end
 
 -->8
@@ -912,7 +927,17 @@ function make_tcor(pos,ry)
 end
 -->8
 -- optimization with graph node
+lastcpu=0
+function resetcpu()
+ lastcpu=0
+end
 
+function curcpu()
+ local cpu=stat(1)
+ local res=cpu-lastcpu 
+ lastcpu=cpu
+ return res
+end
 function make_node(a,_tris)
  local vstart=vrtx[_tris[1]]
  -- init x z with first vrtx
@@ -963,10 +988,18 @@ function getnodtris(nod)
  add_all(_tris,nod.tris)
  add_all(_norms,nod.norms)
  _w[nod.id]=true
+-- print("adding"..nod.id)
+-- print("chld.tris"..#nod.tris)
+ 
  -- take 2 nodes deep
  addchildnodtris(
   1,nod,_tris,_norms,_w)
 
+--print(#_w,32,96)
+--print(#_tris,96)
+-- for k,v in pairs(_w) do
+--  print(k..""..tostr(v))
+-- end
  return {
   tris=_tris,
   norms=_norms
@@ -980,6 +1013,8 @@ function addchildnodtris(
   if lvl>=0 then
    addchildnodtris(lvl,chld,_tris,_norms,_w)
    if not _w[chld.id] then
+    print("adding"..chld.id)
+    print("chld.tris"..#chld.tris)
     _w[chld.id]=true
     add_all(_tris,chld.tris)
     add_all(_norms,chld.norms)
