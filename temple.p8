@@ -118,13 +118,13 @@ function init_cam()
   end
  }
 end
-function init_norm(_vrtx,_tris)
+function init_norm(_vrtx,_poly)
  local norms={}
- for i=1,#_tris,4 do
+ for poly in all(_poly) do
   local v1,v2,v3=
-   v_clone(_vrtx[_tris[i]]),
-   v_clone(_vrtx[_tris[i+1]]),
-   v_clone(_vrtx[_tris[i+2]])
+   v_clone(_vrtx[poly[1]]),
+   v_clone(_vrtx[poly[2]]),
+   v_clone(_vrtx[poly[3]])
   
   -- normal
   v_add(v2,v1,-1)
@@ -138,8 +138,8 @@ end
 function _init()
  cam=init_cam()
 -- nbvrt=#vrtx
--- init_ring()
- init_lvl()
+ init_ring()
+-- init_lvl()
 end
 
 function init_lvl()
@@ -209,26 +209,26 @@ function joinmdl(m1,d1,m2,d2)
  local da=m1:door_idx(d1)+m1.start_vrtx
  local db=m2:door_idx(d2)+m2.start_vrtx
  local mj=make_door_joint(da,db)
- return mj.tris
+ return mj.poly
 end
 --
 function init_ring()
  local pos={0,0,0}
- local a=0.05
- for i=0,19 do
+ local a,nb=0.05,20 --20
+ for i=0,nb-1 do
   local m=make_cor(pos,a*i)
-  local _tris=add_model(m)
+  local _polys=add_model(m)
  	
   d={sin(a*i)*24,0,cos(a*i)*24}
   v_add(pos,d)
   if i>0 then
    local mj=make_cor_joint()
-   add_all(_tris,mj.tris)
+   add_all(_polys,mj.polys)
   end
-  add(nodes,make_node(i+1,_tris))
+  add(nodes,make_node(i+1,_polys))
  end
- for i=1,20 do
-  local j=(i%20+1)
+ for i=1,nb do
+  local j=(i%nb+1)
   link_nodes(i,j)
  end
 end
@@ -239,15 +239,15 @@ function add_model(mdl)
  for k,v in pairs(mdl.vrtx) do
 	 vrtx[k+max_vrtx]=v
  end
- local mtris=mdl.tris
- for i=1,#mtris,4 do
-  mtris[i]=mtris[i]+max_vrtx
-  mtris[i+1]=mtris[i+1]+max_vrtx
-  mtris[i+2]=mtris[i+2]+max_vrtx
-  mtris[i+3]=mtris[i+3]
+ local mpolys=mdl.polys
+ for poly in all(mpolys) do
+  poly[1]=poly[1]+max_vrtx
+  poly[2]=poly[2]+max_vrtx
+  poly[3]=poly[3]+max_vrtx
+  poly[4]=poly[4]+max_vrtx
  end
  max_vrtx=#vrtx
- return mtris
+ return mpolys
 end
 
 function _update()
@@ -307,37 +307,40 @@ function _draw()
 	
  -- testing visibles
  nb_clip=0
- local vistris,nodtris=
-  {},getnodtris(curnod) 
- cpu["5-getnodtris"]=curcpu()
---print(#nodtris.tris,32,96)
- local _tris,_norms=
-  nodtris.tris,nodtris.norms
- for i=1,#_tris,4 do
-  local idx=(i-1)/4+1
-  local norm=_norms[idx]
-  local vp=v_clone(v_wrld[_tris[i]])
+ local vispolys,nodpolys=
+  {},getnodpolys(curnod) 
+ cpu["5-getnodpolys"]=curcpu()
+--print(#nodpolys.poly,32,96)
+ local _polys,_norms=
+  nodpolys.polys,nodpolys.norms
+ print("#_polys"..#_polys)
+ for i=1,#_polys do --todo pairs
+  local norm,poly=_norms[i],_polys[i]
+  local vp=v_clone(v_wrld[poly[1]])
   v_add(vp,cam.pos,-1)
   
   if v_dot(norm,vp)<0 then
    -- clipping
-   local triidx={
-    _tris[i],
-    _tris[i+1],
-    _tris[i+2],
-    _tris[i+3],--col
-    idx}--idx normal
+   local polyidx={
+    poly[1],
+    poly[2],
+    poly[3],
+    poly[4],
+    poly[5],--col
+    i}--idx normal
 
-   local tclips=t_clip({0,0,1},
-    {0,0,1},v_view,triidx)
+   local tclips={polyidx}
+--todo    t_clip({0,0,1},
+--    {0,0,1},v_view,polyidx)
    for t in all(tclips) do
     -- add clipped triangle
     local z=(v_view[t[1]][3]
      +v_view[t[2]][3]
-     +v_view[t[3]][3])/3
-    add(vistris,{
+     +v_view[t[3]][3]
+     +v_view[t[4]][3])/4
+    add(vispolys,{
      key=z,
-     tri=t
+     poly=t
     })
    end
   end 
@@ -348,23 +351,24 @@ function _draw()
  local proj=cam:proj(v_view)
  cpu["7-proj"]=curcpu()
 
- -- sorting visible tris
- shellsort(vistris)
- cpu["8-sortvistris"]=curcpu()
+ -- sorting visible poly
+ shellsort(vispolys)
+ cpu["8-sortvispolys"]=curcpu()
 
  --light
  local lgt={1,-1,0} 
  v_normz(lgt)
 
- -- drawing visible tris
- for j=#vistris,1,-1 do
-  local itri=vistris[j].tri
-  local v1,v2,v3,c,idx=
-	  proj[itri[1]],
-	  proj[itri[2]],
-	  proj[itri[3]],
-	  itri[4],
-	  itri[5]
+ -- drawing visible poly
+ for j=#vispolys,1,-1 do
+  local ipoly=vispolys[j].poly
+  local v1,v2,v3,v4,c,idx=
+	  proj[ipoly[1]],
+	  proj[ipoly[2]],
+	  proj[ipoly[3]],
+	  proj[ipoly[4]],
+	  ipoly[5],
+	  ipoly[6]
 --local w1,w2,w3=
 --v_view[itri[1]],
 --v_view[itri[2]],
@@ -375,6 +379,7 @@ function _draw()
   ptn=flr(ptn*8+8)
   fillp(dith2[flr(ptn)])
   tri(v1[1],v1[2],v2[1],v2[2],v3[1],v3[2],c)
+  tri(v1[1],v1[2],v3[1],v3[2],v4[1],v4[2],c)
 --  
 --fillp()
 --line(64+w1[1],128-w1[3],64+w2[1],128-w2[3],8)
@@ -405,10 +410,11 @@ function _draw()
  fillp()
 
  print("∧"..stat(1)..
-   " tris visible "
-   ..#vistris.." "..curnod.id
+   " poly visible "
+   ..#vispolys.." "..curnod.id
    .."v"..cam.avel
    ,0,0,7) 
+--print("nodes "..#nodes.polys)
  print""
  for k,v in pairs(cpu) do
   print(k.."  "..v)
@@ -713,12 +719,12 @@ function make_cor(pos,ry)
   {8,0,8},{8,8,8},
   {0,20,8},{-8,8,8},{-8,0,8},
  }
- local ltris={
-  1,2,10,col1, 2,9,10,col1,
-  3,9,2,col1, 3,8,9,col1,
-  3,4,7,col1, 3,7,8,col1,
-  4,5,6,col1, 4,6,7,col1,
-  1,10,5,col2, 10,6,5,col2
+ local lpolys={
+  {1,2,9,10,col1},
+  {2,3,8,9,col1},
+  {3,4,7,8,col1},
+  {4,5,6,7,col1},
+  {1,10,6,5,col2},
  }
 
  transform(lvrtx,
@@ -726,7 +732,7 @@ function make_cor(pos,ry)
  
  return {
   vrtx=lvrtx,
-  tris=ltris,
+  polys=lpolys,
   door_idx=function(self,i)
    if (i==2) return 6
    return 1
@@ -745,7 +751,7 @@ function make_door_joint(da,db)
  local b3=b2+1
  local b4=b3+1
  local b5=b4+1
- local ltris={
+ local lpoly={
   a5,b2,b1,col0, a4,b2,a5,col0,
   a4,b3,b2,col0, a3,b3,a4,col0,
   a3,b4,b3,col0, a2,b4,a3,col0,
@@ -753,7 +759,7 @@ function make_door_joint(da,db)
  }
  return {
   vrtx={},
-  tris=ltris
+  poly=lpoly
  }
 end
 
@@ -769,15 +775,15 @@ function make_cor_joint()
  local b4=b3+1
  local b5=b4+1
 
- local ltris={
-  a5,b2,b1,col0, a4,b2,a5,col0,
-  a4,b3,b2,col0, a3,b3,a4,col0,
-  a3,b4,b3,col0, a2,b4,a3,col0,
-  a2,b5,b4,col0, a1,b5,a2,col0,
+ local lpolys={
+  {a5,a4,b2,b1,col0},
+  {a4,a3,b3,b2,col0},
+  {a3,a2,b4,b3,col0},
+  {a2,a1,b5,b4,col0},
  }
  return {
   vrtx={},
-  tris=ltris
+  polys=lpolys
  }
 end
 
@@ -938,16 +944,16 @@ function curcpu()
  lastcpu=cpu
  return res
 end
-function make_node(a,_tris)
- local vstart=vrtx[_tris[1]]
+function make_node(a,_polys)
+ local vstart=vrtx[_polys[1][1]]
  -- init x z with first vrtx
  local minx,minz,maxx,maxz=
    vstart[1],vstart[3],
    vstart[1],vstart[3]
- for i=1,#_tris,4 do
-  local idx=(i-1)%4
-  if idx>=0 and idx<3 then
-   local v=vrtx[_tris[i]]
+ for poly in all(_polys) do
+  --for each vrtx,last is color
+  for i=1,#poly-1 do 
+   local v=vrtx[poly[i]]
    minx=min(minx,v[1])
    minz=min(minz,v[3])
    maxx=max(maxx,v[1])
@@ -958,8 +964,8 @@ function make_node(a,_tris)
  return {
   id=a,
   conn={},
-  tris=_tris,
-  norms=init_norm(vrtx,_tris),
+  polys=_polys,
+  norms=init_norm(vrtx,_polys),
   minx=minx,
   minz=minz,
   maxx=maxx,
@@ -983,40 +989,40 @@ function link_nodes(a,b)
  add(conn_b,nodea)
 end
 
-function getnodtris(nod)
- local _tris,_norms,_w={},{},{}
- add_all(_tris,nod.tris)
+function getnodpolys(nod)
+ local _polys,_norms,_w={},{},{}
+ add_all(_polys,nod.polys)
  add_all(_norms,nod.norms)
  _w[nod.id]=true
 -- print("adding"..nod.id)
--- print("chld.tris"..#nod.tris)
+-- print("chld.polys"..#nod.polys)
  
  -- take 2 nodes deep
- addchildnodtris(
-  1,nod,_tris,_norms,_w)
+ addchildnodpolys(
+  2,nod,_polys,_norms,_w)
 
 --print(#_w,32,96)
---print(#_tris,96)
+--print(#_polys,96)
 -- for k,v in pairs(_w) do
 --  print(k..""..tostr(v))
 -- end
  return {
-  tris=_tris,
+  polys=_polys,
   norms=_norms
  }
 end
 
-function addchildnodtris(
- lvl,nod,_tris,_norms,_w)
+function addchildnodpolys(
+ lvl,nod,_polys,_norms,_w)
  lvl-=1
  for chld in all(nod.conn) do
   if lvl>=0 then
-   addchildnodtris(lvl,chld,_tris,_norms,_w)
+   addchildnodpolys(lvl,chld,_polys,_norms,_w)
    if not _w[chld.id] then
-    print("adding"..chld.id)
-    print("chld.tris"..#chld.tris)
+--    print("adding"..chld.id)
+--    print("chld.poly"..#chld.poly)
     _w[chld.id]=true
-    add_all(_tris,chld.tris)
+    add_all(_polys,chld.polys)
     add_all(_norms,chld.norms)
    end
   end
