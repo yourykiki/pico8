@@ -329,11 +329,10 @@ function _draw()
     poly[5],--col
     i}--idx normal
 
-   local tclips={polyidx}
---todo    t_clip({0,0,1},
---    {0,0,1},v_view,polyidx)
+   local tclips=t_clip({0,0,1},
+    {0,0,1},v_view,polyidx)
    for t in all(tclips) do
-    -- add clipped triangle
+    -- add clipped polygon
     local z=(v_view[t[1]][3]
      +v_view[t[2]][3]
      +v_view[t[3]][3]
@@ -592,67 +591,69 @@ function make_m_from_v_angle(up,ang)
 end
 
 function t_clip(
- v_pln,v_nrm,v_view,triidx)
+ v_pln,v_nrm,v_view,polyidx)
     
- local tri,v_in,v_out={
- v_view[triidx[1]],
- v_view[triidx[2]],
- v_view[triidx[3]]},
+ local poly,v_in,v_out={
+ v_view[polyidx[1]],
+ v_view[polyidx[2]],
+ v_view[polyidx[3]],
+ v_view[polyidx[4]]
+ },
  {},{}
 
  local pdot,d=
   v_dot(v_nrm,v_pln),{}
- for i=1,3 do
-  d[i]=v_dot(v_nrm,tri[i])-pdot
+ for i=1,4 do
+  d[i]=v_dot(v_nrm,poly[i])-pdot
   if d[i]>0 then 
    add(v_in,i)
   else
    add(v_out,i)
   end
  end
- if (#v_in==3) return {triidx}
- if #v_in==1 and #v_out==2 then
+ if (#v_in==4) return {polyidx}
+--f if #v_in==1 and #v_out==2 then
   --make a new tri with
   --inside point and
   --new points
-  local v1,v2=
-   v_intsec(v_pln,v_nrm,tri[v_in[1]],tri[v_out[1]]),
-   v_intsec(v_pln,v_nrm,tri[v_in[1]],tri[v_out[2]])
-  idx1=max_vrtx+nb_clip+1
-  idx2=idx1+1
-  v_view[idx1],v_view[idx2]=
-   v1,v2
-  nb_clip+=2
-  return {
-   {triidx[v_in[1]],
-   idx1,
-   idx2,
-   triidx[4],
-   triidx[5]}
-  }
- end
- if #v_in==2 and #v_out==1 then
-  local v1,v2=
-   v_intsec(v_pln,v_nrm,tri[v_in[1]],tri[v_out[1]]),
-   v_intsec(v_pln,v_nrm,tri[v_in[2]],tri[v_out[1]])
-  idx1=max_vrtx+nb_clip+1
-  idx2=idx1+1
-  v_view[idx1],v_view[idx2]=
-   v1,v2
-  nb_clip+=2
-  return {
-   {triidx[v_in[1]],
-   triidx[v_in[2]],
-   idx1,
-   triidx[4],
-   triidx[5]},
-   {triidx[v_in[2]],
-   idx1,
-   idx2,
-   triidx[4],
-   triidx[5]}
-  }
- end
+--f  local v1,v2=
+--f   v_intsec(v_pln,v_nrm,tri[v_in[1]],tri[v_out[1]]),
+--f   v_intsec(v_pln,v_nrm,tri[v_in[1]],tri[v_out[2]])
+--f  idx1=max_vrtx+nb_clip+1
+--f  idx2=idx1+1
+--f  v_view[idx1],v_view[idx2]=
+--f   v1,v2
+--f  nb_clip+=2
+--f  return {
+--f   {triidx[v_in[1]],
+--f   idx1,
+--f   idx2,
+--f   triidx[4],
+--f   triidx[5]}
+--f  }
+--f end
+--f if #v_in==2 and #v_out==1 then
+--f  local v1,v2=
+--f   v_intsec(v_pln,v_nrm,tri[v_in[1]],tri[v_out[1]]),
+--f   v_intsec(v_pln,v_nrm,tri[v_in[2]],tri[v_out[1]])
+--f  idx1=max_vrtx+nb_clip+1
+--f  idx2=idx1+1
+--f  v_view[idx1],v_view[idx2]=
+--f   v1,v2
+--f  nb_clip+=2
+--f  return {
+--f   {triidx[v_in[1]],
+--f   triidx[v_in[2]],
+--f   idx1,
+--f   triidx[4],
+--f   triidx[5]},
+--f   {triidx[v_in[2]],
+--f   idx1,
+--f   idx2,
+--f   triidx[4],
+--f   triidx[5]}
+--f  }
+--f end
  return nil
 end
 
