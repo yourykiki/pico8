@@ -138,8 +138,8 @@ end
 function _init()
  cam=init_cam()
 -- nbvrt=#vrtx
- init_ring()
--- init_lvl()
+-- init_ring()
+ init_lvl()
 end
 
 function init_lvl()
@@ -708,7 +708,7 @@ end
 -->8
 -- 3d models
 
-local col0, col1,col2,col3,col4,col5,m4ident=
+local col0,col1,col2,col3,col4,col5,m4ident=
  0x01,0x54,0x4f,0x55,0x1c,0x53,
  {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1}
 
@@ -753,10 +753,10 @@ function make_door_joint(da,db)
  local b4=b3+1
  local b5=b4+1
  local lpoly={
-  a5,b2,b1,col0, a4,b2,a5,col0,
-  a4,b3,b2,col0, a3,b3,a4,col0,
-  a3,b4,b3,col0, a2,b4,a3,col0,
-  a2,b5,b4,col0, a1,b5,a2,col0,
+  {a5,a4,b2,b1,col0},
+  {a4,a3,b3,b2,col0}, 
+  {a3,a2,b4,b3,col0}, 
+  {a2,a1,b5,b4,col0},
  }
  return {
   vrtx={},
@@ -817,28 +817,27 @@ function make_xcor(pos,ry)
   {-16,0,24},{-16,8,24},
   {-16,20,16},{-16,8,8},{-16,0,8},
  }
- local _tris={
-  1,2,6,col1, 2,7,6,col1,
-  3,7,2,col1, 3,8,7,col1,
-  3,4,9,col1, 3,9,8,col1,
-  4,5,10,col1, 4,10,9,col1,
-  1,6,5,col2, 6,10,5,col2,--end
-  11,12,16,col1, 12,17,16,col1,
-  12,13,17,col1, 13,8,17,col1,
-  13,14,18,col1, 13,18,8,col1,
-  14,15,19,col1, 14,19,18,col1,
-  11,16,15,col2, 15,16,19,col2,--end
-  20,21,10,col1, 21,9,10,col1,
-  21,22,8,col1, 21,8,9,col1,
-  22,23,17,col1, 22,17,8,col1,
-  23,24,16,col1, 23,16,17,col1,
-  10,16,20,col2, 20,16,24,col2,--end
-  29,6,7,col1, 29,7,28,col1,
-  28,7,8,col1, 28,8,27,col1,
-  27,8,18,col1, 27,18,26,col1,
-  26,18,19,col1, 26,19,25,col1,
-  29,25,6,col2, 25,19,6,col2,--end
-  --6,19,10,col0, 19,16,10,col0,
+ local _polys={
+  {1,2,7,6,col1},
+  {3,8,7,2,col1},
+  {3,4,9,8,col1},
+  {4,5,10,9,col1},
+  {1,6,10,5,col2},--end
+  {11,12,17,16,col1},
+  {12,13,8,17,col1},
+  {13,14,18,8,col1},
+  {14,15,19,18,col1},
+  {11,16,19,15,col2},--end
+  {20,21,9,10,col1},
+  {21,22,8,9,col1},
+  {22,23,17,8,col1},
+  {23,24,16,17,col1},
+  {10,16,24,20,col2},--end
+  {28,29,6,7,col1},
+  {27,28,7,8,col1},
+  {26,27,8,18,col1},
+  {25,26,18,19,col1},
+  {29,25,19,6,col2},--end
  }
 
  transform(_vrtx,
@@ -846,7 +845,7 @@ function make_xcor(pos,ry)
  
  return {
   vrtx=_vrtx,
-  tris=_tris,
+  polys=_polys,
   door_idx=function(self,i)
    if (i==4) return 25
    if (i==3) return 20
@@ -865,17 +864,17 @@ function make_corner(pos,ry)
   {16,0,8},{16,8,8},
   {16,20,16},{16,8,24},{16,0,24},
  }
- local _tris={
-  1,2,6,col1, 2,7,6,col1,
-  3,7,2,col1, 3,8,7,col1,
-  3,4,9,col1, 3,9,8,col1,
-  4,5,10,col1, 4,10,9,col1,
-  1,6,5,col2, 6,10,5,col2,--end
-  11,12,10,col1, 12,9,10,col1,
-  12,13,9,col1, 13,8,9,col1,
-  13,14,8,col1, 14,7,8,col1,
-  14,15,7,col1, 15,6,7,col1,
-  6,15,10,col2, 15,11,10,col2,--end
+ local _polys={
+  {1,2,7,6,col1},
+  {2,3,8,7,col1},
+  {3,4,9,8,col1},
+  {4,5,10,9,col1},
+  {1,6,10,5,col2},--end
+  {11,12,9,10,col1},
+  {12,13,8,9,col1},
+  {13,14,7,8,col1},
+  {14,15,6,7,col1}, 
+  {6,15,11,10,col2},--end
  }
 
  transform(_vrtx,
@@ -883,7 +882,7 @@ function make_corner(pos,ry)
  
  return {
   vrtx=_vrtx,
-  tris=_tris,
+  polys=_polys,
   door_idx=function(self,i)
    if (i==2) return 11
    return 1
@@ -903,20 +902,20 @@ function make_tcor(pos,ry)
   {16,20,16},{16,8,24},{16,0,24},
   {-8,0,8},{-8,0,24}
  }
- local _tris={
-  1,2,13,col1, 2,12,13,col1,
-  3,12,2,col1, 3,11,12,col1,
-  4,7,3,col1, 3,7,6,col1,
-  5,8,4,col1, 4,8,7,col1,
-  5,1,8,col2, 1,21,8,col2,--end
-  10,11,15,col1, 11,6,15,col1,
-  9,10,14,col1, 10,15,14,col1,
-  14,22,9,col2, 22,13,9,col2,--end
-  16,17,8,col1, 17,7,8,col1,
-  17,18,7,col1, 18,6,7,col1,
-  18,19,15,col1, 18,15,6,col1,
-  19,20,14,col1, 19,14,15,col1,
-  16,8,14,col2, 16,14,20,col2,--end
+ local _polys={
+  {1,2,12,13,col1},
+  {3,11,12,2,col1},
+  {4,7,6,3,col1},
+  {5,8,7,4,col1}, 
+  {5,1,21,8,col2},--end
+  {10,11,6,15,col1},
+  {9,10,15,14,col1},
+  {14,22,13,9,col2},--end
+  {16,17,7,8,col1},
+  {17,18,6,7,col1},
+  {18,19,15,6,col1},
+  {19,20,14,15,col1},
+  {16,8,14,20,col2},--end
  }
 
  transform(_vrtx,
@@ -924,7 +923,7 @@ function make_tcor(pos,ry)
  
  return {
   vrtx=_vrtx,
-  tris=_tris,
+  polys=_polys,
   door_idx=function(self,i)
    if (i==3) return 16
    if (i==2) return 9
