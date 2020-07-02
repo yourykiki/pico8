@@ -364,31 +364,34 @@ function _draw()
  -- fixme 
  for j=#vispolys,1,-1 do
   local ipoly=vispolys[j].poly
-  local v1,v2,v3,v4,c,idx=
-	  proj[ipoly[1]],
-	  proj[ipoly[2]],
-	  proj[ipoly[3]],
-	  proj[ipoly[4]],
-	  ipoly[#ipoly-1],
+--p  local v1,v2,v3,v4,c,idx=
+--p	  proj[ipoly[1]],
+--p	  proj[ipoly[2]],
+--p	  proj[ipoly[3]],
+--p	  proj[ipoly[4]],
+  local v,c,idx={},
+   ipoly[#ipoly-1],
 	  ipoly[#ipoly]
-
+	 
+		for i=1,#ipoly-2 do
+		 v[i]=proj[ipoly[i]]
+  end
   --color and dither
   color(c)
   local ptn=v_dot(_norms[idx],lgt)
   ptn=flr(ptn*8+8)
   fillp(dith2[flr(ptn)])
-  tri(v1[1],v1[2],v2[1],v2[2],v3[1],v3[2],c)
-  tri(v1[1],v1[2],v3[1],v3[2],v4[1],v4[2],c)
-  if #ipoly>6 then
-   local v5=proj[ipoly[5]]
-   tri(v1[1],v1[2],v4[1],v4[2],v5[1],v5[2],c)
-   --print"yeah"
-  end
+  --filling
+  polyfill(v,c)
+--p  tri(v1[1],v1[2],v2[1],v2[2],v3[1],v3[2],c)
+--p  tri(v1[1],v1[2],v3[1],v3[2],v4[1],v4[2],c)
+--p  if #ipoly>6 then
+--p   local v5=proj[ipoly[5]]
+--p   tri(v1[1],v1[2],v4[1],v4[2],v5[1],v5[2],c)
+--p  end
 --  
 --fillp()
---line(64+w1[1],128-w1[3],64+w2[1],128-w2[3],8)
---line(64+w3[1],128-w3[3])
---line(64+w1[1],128-w1[3])
+
   -- wireframe
   fillp()
   if wf then
@@ -419,14 +422,14 @@ function _draw()
    .."v"..cam.avel
    ,0,0,7) 
 --print("nodes "..#nodes.polys)
- print""
+-- print""
 -- for k,v in pairs(cpu) do
 --  print(k.."  "..v)
 -- end
 end
 
 -->8
--- @p01
+-- rasterization @p01
 function p01_trapeze_h(l,r,lt,rt,y0,y1)
  lt,rt=(lt-l)/(y1-y0),(rt-r)/(y1-y0)
  if(y0<0)l,r,y0=l-y0*lt,r-y0*rt,0
@@ -469,6 +472,45 @@ function tri(x0,y0,x1,y1,x2,y2,col)
   p01_trapeze_w(y1,col,y2,y2,x1,x2)
  end
 -- flip()
+end
+
+-- @fred72 polyfill
+function polyfill(v,c)
+ local p0,nodes=v[#v],{}
+ local x0,y0=p0[1],p0[2]
+ for i=1,#v do
+  local p1=v[i]
+  local x1,y1=p1[1],p1[2]
+  local _x1,_y1=x1,y1
+  if(y0>y1) x0,y0,x1,y1=x1,y1,x0,y0
+  local dy=y1-y0
+  local dx=(x1-x0)/dy
+  if(y0<0) x0-=y0*dx y0=0
+  local cy0=ceil(y0)
+  -- sub-pix shift
+  local sy=cy0-y0
+  x0+=sy*dx
+
+  for y=cy0,min(ceil(y1)-1,127) do
+   local x=nodes[y]
+   if x then
+    -- rectfill(x[1],y,x0,y,7)
+    -- backup current edge values
+    local a,b=x,x0
+    if(a>b) a,b=b,a
+
+    local x0,x1=
+     ceil(a),min(ceil(b)-1,127)
+    if x0<=x1 then
+     rectfill(x0,y,x1,y,c)
+    end
+   else
+    nodes[y]=x0
+   end
+   x0+=dx
+  end
+  x0,y0=_x1,_y1
+ end
 end
 -->8
 -- @fred72 3d utils and more
@@ -645,7 +687,7 @@ function t_clip(
  add(res,polyidx[5])
  add(res,polyidx[6])
 
- if (#res>=6) return res
+ if (#res>=5) return res
  return nil
 end
 
