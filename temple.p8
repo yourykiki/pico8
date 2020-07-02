@@ -382,7 +382,7 @@ function _draw()
   if #ipoly>6 then
    local v5=proj[ipoly[5]]
    tri(v1[1],v1[2],v4[1],v4[2],v5[1],v5[2],c)
-   print"yeah"
+   --print"yeah"
   end
 --  
 --fillp()
@@ -991,7 +991,7 @@ function getnodpolys(nod)
  
  -- take 2 nodes deep
  addchildnodpolys(
-  2,nod,_polys,_norms,_w)
+  1,nod,_polys,_norms,_w)
 
 --print(#_w,32,96)
 --print(#_polys,96)
