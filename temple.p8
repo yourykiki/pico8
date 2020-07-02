@@ -329,17 +329,19 @@ function _draw()
     poly[5],--col
     i}--idx normal
 
-   local tclips=t_clip({0,0,1},
+   local tc=t_clip({0,0,1},
     {0,0,1},v_view,polyidx)
-   for t in all(tclips) do
+--   for tc in all(tclips) do
     -- add clipped polygon
-    local z=(v_view[t[1]][3]
-     +v_view[t[2]][3]
-     +v_view[t[3]][3]
-     +v_view[t[4]][3])/4
+   if tc then
+    local z=0
+    for itc=1,#tc do
+     z+=v_view[tc[itc]][3]
+    end
+				z/=#tc
     add(vispolys,{
      key=z,
-     poly=t
+     poly=tc
     })
    end
   end 
@@ -359,6 +361,7 @@ function _draw()
  v_normz(lgt)
 
  -- drawing visible poly
+ -- fixme 
  for j=#vispolys,1,-1 do
   local ipoly=vispolys[j].poly
   local v1,v2,v3,v4,c,idx=
@@ -366,12 +369,9 @@ function _draw()
 	  proj[ipoly[2]],
 	  proj[ipoly[3]],
 	  proj[ipoly[4]],
-	  ipoly[5],
-	  ipoly[6]
---local w1,w2,w3=
---v_view[itri[1]],
---v_view[itri[2]],
---v_view[itri[3]]
+	  ipoly[#ipoly-1],
+	  ipoly[#ipoly]
+
   --color and dither
   color(c)
   local ptn=v_dot(_norms[idx],lgt)
@@ -379,6 +379,11 @@ function _draw()
   fillp(dith2[flr(ptn)])
   tri(v1[1],v1[2],v2[1],v2[2],v3[1],v3[2],c)
   tri(v1[1],v1[2],v3[1],v3[2],v4[1],v4[2],c)
+  if #ipoly>6 then
+   local v5=proj[ipoly[5]]
+   tri(v1[1],v1[2],v4[1],v4[2],v5[1],v5[2],c)
+   print"yeah"
+  end
 --  
 --fillp()
 --line(64+w1[1],128-w1[3],64+w2[1],128-w2[3],8)
@@ -601,59 +606,46 @@ function t_clip(
  },
  {},{}
 
- local pdot,d=
+ local pdot,res,d,last=
   v_dot(v_nrm,v_pln),{}
- for i=1,4 do
-  d[i]=v_dot(v_nrm,poly[i])-pdot
-  if d[i]>0 then 
-   add(v_in,i)
+ 
+ for i=1,5 do
+  local j,prevj=
+   (i-1)%4+1,(i-2)%4+1
+  d=v_dot(v_nrm,poly[j])-pdot
+  if last==nil then
+   last=d>0 and "in" or "out"
+  elseif d>0 then 
+   if last=="out" then
+    --calc intersect
+    local v1=
+     v_intsec(v_pln,v_nrm,poly[prevj],poly[j])
+    --add res
+    local idx=max_vrtx+nb_clip+1
+    v_view[idx]=v1
+    nb_clip+=1
+    add(res,idx)
+   end
+   add(res,polyidx[j])
+   last="in"
   else
-   add(v_out,i)
+   if last=="in" then
+    --calc intersect
+    local v1=
+     v_intsec(v_pln,v_nrm,poly[prevj],poly[j])
+    --add res
+    local idx=max_vrtx+nb_clip+1
+    v_view[idx]=v1
+    nb_clip+=1
+    add(res,idx)
+   end
+   last="out"
   end
  end
- if (#v_in==4) return {polyidx}
---f if #v_in==1 and #v_out==2 then
-  --make a new tri with
-  --inside point and
-  --new points
---f  local v1,v2=
---f   v_intsec(v_pln,v_nrm,tri[v_in[1]],tri[v_out[1]]),
---f   v_intsec(v_pln,v_nrm,tri[v_in[1]],tri[v_out[2]])
---f  idx1=max_vrtx+nb_clip+1
---f  idx2=idx1+1
---f  v_view[idx1],v_view[idx2]=
---f   v1,v2
---f  nb_clip+=2
---f  return {
---f   {triidx[v_in[1]],
---f   idx1,
---f   idx2,
---f   triidx[4],
---f   triidx[5]}
---f  }
---f end
---f if #v_in==2 and #v_out==1 then
---f  local v1,v2=
---f   v_intsec(v_pln,v_nrm,tri[v_in[1]],tri[v_out[1]]),
---f   v_intsec(v_pln,v_nrm,tri[v_in[2]],tri[v_out[1]])
---f  idx1=max_vrtx+nb_clip+1
---f  idx2=idx1+1
---f  v_view[idx1],v_view[idx2]=
---f   v1,v2
---f  nb_clip+=2
---f  return {
---f   {triidx[v_in[1]],
---f   triidx[v_in[2]],
---f   idx1,
---f   triidx[4],
---f   triidx[5]},
---f   {triidx[v_in[2]],
---f   idx1,
---f   idx2,
---f   triidx[4],
---f   triidx[5]}
---f  }
---f end
+ add(res,polyidx[5])
+ add(res,polyidx[6])
+
+ if (#res>=6) return res
  return nil
 end
 
