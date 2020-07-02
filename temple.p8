@@ -334,11 +334,11 @@ function _draw()
 --   for tc in all(tclips) do
     -- add clipped polygon
    if tc then
-    local z=0
-    for itc=1,#tc do
+    local z,nbv=0,#tc-2
+    for itc=1,nbv do
      z+=v_view[tc[itc]][3]
     end
-				z/=#tc
+				z/=nbv
     add(vispolys,{
      key=z,
      poly=tc
@@ -420,9 +420,9 @@ function _draw()
    ,0,0,7) 
 --print("nodes "..#nodes.polys)
  print""
- for k,v in pairs(cpu) do
-  print(k.."  "..v)
- end
+-- for k,v in pairs(cpu) do
+--  print(k.."  "..v)
+-- end
 end
 
 -->8
