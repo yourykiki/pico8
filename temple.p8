@@ -334,11 +334,6 @@ function _draw()
 --   for tc in all(tclips) do
     -- add clipped polygon
    if tc then
---z    local z,nbv=0,#tc-2
---z    for itc=1,nbv do
---z     z+=v_view[tc[itc]][3]
---z    end
---z				z/=nbv
     local z,nbv=0,#tc-2
     for itc=1,nbv do
      z=max(z,v_view[tc[itc]][3])
