@@ -110,8 +110,8 @@ function init_cam()
     local v=vrtx[i]
     local w=63.5/v[3]
     vert[i]={
-     63.5+flr(w*v[1]),
-     63.5-flr(w*v[2])
+     63.5+w*v[1],
+     63.5-w*v[2]
     }
    end
    return vert
@@ -334,11 +334,15 @@ function _draw()
 --   for tc in all(tclips) do
     -- add clipped polygon
    if tc then
+--z    local z,nbv=0,#tc-2
+--z    for itc=1,nbv do
+--z     z+=v_view[tc[itc]][3]
+--z    end
+--z				z/=nbv
     local z,nbv=0,#tc-2
     for itc=1,nbv do
-     z+=v_view[tc[itc]][3]
+     z=max(z,v_view[tc[itc]][3])
     end
-				z/=nbv
     add(vispolys,{
      key=z,
      poly=tc
@@ -361,14 +365,8 @@ function _draw()
  v_normz(lgt)
 
  -- drawing visible poly
- -- fixme 
  for j=#vispolys,1,-1 do
   local ipoly=vispolys[j].poly
---p  local v1,v2,v3,v4,c,idx=
---p	  proj[ipoly[1]],
---p	  proj[ipoly[2]],
---p	  proj[ipoly[3]],
---p	  proj[ipoly[4]],
   local v,c,idx={},
    ipoly[#ipoly-1],
 	  ipoly[#ipoly]
@@ -377,19 +375,13 @@ function _draw()
 		 v[i]=proj[ipoly[i]]
   end
   --color and dither
-  color(c)
+  --color(c)
   local ptn=v_dot(_norms[idx],lgt)
   ptn=flr(ptn*8+8)
   fillp(dith2[flr(ptn)])
   --filling
   polyfill(v,c)
---p  tri(v1[1],v1[2],v2[1],v2[2],v3[1],v3[2],c)
---p  tri(v1[1],v1[2],v3[1],v3[2],v4[1],v4[2],c)
---p  if #ipoly>6 then
---p   local v5=proj[ipoly[5]]
---p   tri(v1[1],v1[2],v4[1],v4[2],v5[1],v5[2],c)
---p  end
---  
+
 --fillp()
 
   -- wireframe
@@ -429,88 +421,9 @@ function _draw()
 end
 
 -->8
--- rasterization @p01
-function p01_trapeze_h(l,r,lt,rt,y0,y1)
- lt,rt=(lt-l)/(y1-y0),(rt-r)/(y1-y0)
- if(y0<0)l,r,y0=l-y0*lt,r-y0*rt,0
- y1=min(y1,128)
- for y0=y0,y1 do
-  rectfill(l,y0,r,y0)
-  l+=lt
-  r+=rt
- end
-end
-function p01_trapeze_w(t,b,tt,bt,x0,x1)
- tt,bt=(tt-t)/(x1-x0),(bt-b)/(x1-x0)
- if(x0<0)t,b,x0=t-x0*tt,b-x0*bt,0
- x1=min(x1,128)
- for x0=x0,x1 do
-  rectfill(x0,t,x0,b)
-  t+=tt
-  b+=bt
- end
-end
-function tri(x0,y0,x1,y1,x2,y2,col)
+-- rasterization @fsouchu
+-- polyfill from virtua racing
 
- local x0,y0,x1,y1,x2,y2=
-  band(x0,0xffff),band(y0,0xffff),
-  band(x1,0xffff),band(y1,0xffff),
-  band(x2,0xffff),band(y2,0xffff)
- if(y1<y0)x0,x1,y0,y1=x1,x0,y1,y0
- if(y2<y0)x0,x2,y0,y2=x2,x0,y2,y0
- if(y2<y1)x1,x2,y1,y2=x2,x1,y2,y1
- if max(x2,max(x1,x0))-min(x2,min(x1,x0)) > y2-y0 then
-  col=x0+(x2-x0)/(y2-y0)*(y1-y0)
-  p01_trapeze_h(x0,x0,x1,col,y0,y1)
-  p01_trapeze_h(x1,col,x2,x2,y1,y2)
- else
-  if(x1<x0)x0,x1,y0,y1=x1,x0,y1,y0
-  if(x2<x0)x0,x2,y0,y2=x2,x0,y2,y0
-  if(x2<x1)x1,x2,y1,y2=x2,x1,y2,y1
-  col=y0+(y2-y0)/(x2-x0)*(x1-x0)
-  p01_trapeze_w(y0,y0,y1,col,x0,x1)
-  p01_trapeze_w(y1,col,y2,y2,x1,x2)
- end
--- flip()
-end
-
--- @fred72 polytex->polyfill
-function polyfill_(v,c)
- color(c)
- local p0,nodes=v[#v],{}
- local x0,y0=p0[1],p0[2]
- for i=1,#v do
-  local p1=v[i]
-  local x1,y1=p1[1],p1[2]
-  local _x1,_y1=x1,y1
-  if(y0>y1) x0,y0,x1,y1=x1,y1,x0,y0
-  local dx=(x1-x0)/(y1-y0)
-  if(y0<0) x0-=y0*dx y0=0
-  local cy0=ceil(y0)
-  -- sub-pix shift
-  x0+=(cy0-y0)*dx
-
-  for y=cy0,min(ceil(y1)-1,127) do
-   local x=nodes[y]
-   if x then
-    -- rectfill(x[1],y,x0,y,7)
-    -- backup current edge values
-    --local a,b=x,x0
-    --if(a>b) a,b=b,a
-
-    --local x0,x1=
-    -- ceil(a),min(ceil(b)-1,127)
-     rectfill(x,y,x0,y)
-   else
-    nodes[y]=x0
-   end
-   x0+=dx
-  end
-  x0,y0=_x1,_y1
- end
-end
-
--- @fred72 polyfill
 function polyfill(p,col)
 	color(col)
 	local p0,nodes=p[#p],{}
@@ -524,7 +437,7 @@ function polyfill(p,col)
 		if(y0>y1) x1=x0 y1=y0 x0=_x1 y0=_y1
 		-- exact slope
 		local dx=(x1-x0)/(y1-y0)
-		if(y0<0) x0-=(y0+128)*dx y0=0
+		if(y0<0) x0-=y0*dx y0=-1
 		-- subpixel shifting (after clipping)
 		local cy0=ceil(y0)--y0\1+1
 		x0+=(cy0-y0)*dx
@@ -532,7 +445,6 @@ function polyfill(p,col)
 			local x=nodes[y]
 			if x then
 				rectfill(x,y,x0,y)
---				flip()
 			else
 				nodes[y]=x0
 			end
@@ -544,7 +456,7 @@ function polyfill(p,col)
 	end
 end
 -->8
--- @fred72 3d utils and more
+-- @fsouchu 3d utils and more
 function v_cross(a,b)
  local ax,ay,az=a[1],a[2],a[3]
  local bx,by,bz=b[1],b[2],b[3]
