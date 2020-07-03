@@ -476,6 +476,7 @@ end
 
 -- @fred72 polytex->polyfill
 function polyfill_(v,c)
+ color(c)
  local p0,nodes=v[#v],{}
  local x0,y0=p0[1],p0[2]
  for i=1,#v do
@@ -483,27 +484,23 @@ function polyfill_(v,c)
   local x1,y1=p1[1],p1[2]
   local _x1,_y1=x1,y1
   if(y0>y1) x0,y0,x1,y1=x1,y1,x0,y0
-  local dy=y1-y0
-  local dx=(x1-x0)/dy
+  local dx=(x1-x0)/(y1-y0)
   if(y0<0) x0-=y0*dx y0=0
   local cy0=ceil(y0)
   -- sub-pix shift
-  local sy=cy0-y0
-  x0+=sy*dx
+  x0+=(cy0-y0)*dx
 
   for y=cy0,min(ceil(y1)-1,127) do
    local x=nodes[y]
    if x then
     -- rectfill(x[1],y,x0,y,7)
     -- backup current edge values
-    local a,b=x,x0
-    if(a>b) a,b=b,a
+    --local a,b=x,x0
+    --if(a>b) a,b=b,a
 
-    local x0,x1=
-     ceil(a),min(ceil(b)-1,127)
-    if x0<=x1 then
-     rectfill(x0,y,x1,y,c)
-    end
+    --local x0,x1=
+    -- ceil(a),min(ceil(b)-1,127)
+     rectfill(x,y,x0,y)
    else
     nodes[y]=x0
    end
@@ -527,7 +524,7 @@ function polyfill(p,col)
 		if(y0>y1) x1=x0 y1=y0 x0=_x1 y0=_y1
 		-- exact slope
 		local dx=(x1-x0)/(y1-y0)
-		if(y0<-64) x0-=(y0+64)*dx y0=-64
+		if(y0<0) x0-=(y0+128)*dx y0=0
 		-- subpixel shifting (after clipping)
 		local cy0=ceil(y0)--y0\1+1
 		x0+=(cy0-y0)*dx
@@ -535,7 +532,7 @@ function polyfill(p,col)
 			local x=nodes[y]
 			if x then
 				rectfill(x,y,x0,y)
-				flip()
+--				flip()
 			else
 				nodes[y]=x0
 			end
