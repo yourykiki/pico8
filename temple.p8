@@ -3,7 +3,7 @@ version 18
 __lua__
 -- temple corridor demo
 -- @yourykiki
-
+local cpu={}
 local cam,scl,wf,t={},3,false,0
 --
 local v_up={0,1,0}
@@ -110,21 +110,21 @@ function init_cam()
     local v=vrtx[i]
     local w=63.5/v[3]
     vert[i]={
-     63.5+flr(w*v[1]),
-     63.5-flr(w*v[2])
+     63.5+w*v[1],
+     63.5-w*v[2]
     }
    end
    return vert
   end
  }
 end
-function init_norm(_vrtx,_tris)
+function init_norm(_vrtx,_poly)
  local norms={}
- for i=1,#_tris,4 do
+ for poly in all(_poly) do
   local v1,v2,v3=
-   v_clone(_vrtx[_tris[i]]),
-   v_clone(_vrtx[_tris[i+1]]),
-   v_clone(_vrtx[_tris[i+2]])
+   v_clone(_vrtx[poly[1]]),
+   v_clone(_vrtx[poly[2]]),
+   v_clone(_vrtx[poly[3]])
   
   -- normal
   v_add(v2,v1,-1)
@@ -209,26 +209,26 @@ function joinmdl(m1,d1,m2,d2)
  local da=m1:door_idx(d1)+m1.start_vrtx
  local db=m2:door_idx(d2)+m2.start_vrtx
  local mj=make_door_joint(da,db)
- return mj.tris
+ return mj.poly
 end
 --
 function init_ring()
  local pos={0,0,0}
- local a=0.05
- for i=0,19 do
+ local a,nb=0.05,20 --20
+ for i=0,nb-1 do
   local m=make_cor(pos,a*i)
-  local _tris=add_model(m)
+  local _polys=add_model(m)
  	
   d={sin(a*i)*24,0,cos(a*i)*24}
   v_add(pos,d)
   if i>0 then
    local mj=make_cor_joint()
-   add_all(_tris,mj.tris)
+   add_all(_polys,mj.polys)
   end
-  add(nodes,make_node(i+1,_tris))
+  add(nodes,make_node(i+1,_polys))
  end
- for i=1,20 do
-  local j=(i%20+1)
+ for i=1,nb do
+  local j=(i%nb+1)
   link_nodes(i,j)
  end
 end
@@ -239,18 +239,19 @@ function add_model(mdl)
  for k,v in pairs(mdl.vrtx) do
 	 vrtx[k+max_vrtx]=v
  end
- local mtris=mdl.tris
- for i=1,#mtris,4 do
-  mtris[i]=mtris[i]+max_vrtx
-  mtris[i+1]=mtris[i+1]+max_vrtx
-  mtris[i+2]=mtris[i+2]+max_vrtx
-  mtris[i+3]=mtris[i+3]
+ local mpolys=mdl.polys
+ for poly in all(mpolys) do
+  poly[1]=poly[1]+max_vrtx
+  poly[2]=poly[2]+max_vrtx
+  poly[3]=poly[3]+max_vrtx
+  poly[4]=poly[4]+max_vrtx
  end
  max_vrtx=#vrtx
- return mtris
+ return mpolys
 end
 
 function _update()
+resetcpu()
  t+=0.01
  local btu,btd=btn(⬆️,1),btn(⬇️,1)
  local btsl,btsr=btn(⬅️,1),btn(➡️,1)
@@ -268,9 +269,10 @@ function _update()
  if (not btsl and not btsr) cam:sstp()
  if (not btll and not btlr) cam:lstp()
  cam:move()
- 
+ cpu["1-b_curnod"]=curcpu()
  -- on which node camera is ?
  curnod=get_curnod(cam.pos,curnod)
+ cpu["2-curnod"]=curcpu()
 end
 
 function _draw()
@@ -287,6 +289,7 @@ function _draw()
  m_wrld=m_x_m(m_wrld,m_tran)
 	
 	-- camera
+ cpu["3-b_transf"]=curcpu()
  cam:upd_m()
  local v_view,v_wrld={},{}
 	
@@ -295,6 +298,7 @@ function _draw()
   add(v_wrld,tmp)
   add(v_view,m_x_v(cam.m,tmp))
  end
+ cpu["4-transf"]=curcpu()
 	
  --should be usefull only for
  --rotating objects, so it
@@ -303,75 +307,78 @@ function _draw()
 	
  -- testing visibles
  nb_clip=0
- local vistris,nodtris=
-  {},getnodtris(curnod) 
-
- local _tris,_norms=
-  nodtris.tris,nodtris.norms
- for i=1,#_tris,4 do
-  local idx=(i-1)/4+1
-  local norm=_norms[idx]
-  local vp=v_clone(v_wrld[_tris[i]])
+ local vispolys,nodpolys=
+  {},getnodpolys(curnod) 
+ cpu["5-getnodpolys"]=curcpu()
+--print(#nodpolys.poly,32,96)
+ local _polys,_norms=
+  nodpolys.polys,nodpolys.norms
+ print("#_polys"..#_polys)
+ for i=1,#_polys do --todo pairs
+  local norm,poly=_norms[i],_polys[i]
+  local vp=v_clone(v_wrld[poly[1]])
   v_add(vp,cam.pos,-1)
   
   if v_dot(norm,vp)<0 then
    -- clipping
-   local triidx={
-    _tris[i],
-    _tris[i+1],
-    _tris[i+2],
-    _tris[i+3],--col
-    idx}--idx normal
+   local polyidx={
+    poly[1],
+    poly[2],
+    poly[3],
+    poly[4],
+    poly[5],--col
+    i}--idx normal
 
-   local tclips=t_clip({0,0,1},
-    {0,0,1},v_view,triidx)
-   for t in all(tclips) do
-    -- add clipped triangle
-    local z=(v_view[t[1]][3]
-     +v_view[t[2]][3]
-     +v_view[t[3]][3])/3
-    add(vistris,{
+   local tc=t_clip({0,0,1},
+    {0,0,1},v_view,polyidx)
+--   for tc in all(tclips) do
+    -- add clipped polygon
+   if tc then
+    local z,nbv=0,#tc-2
+    for itc=1,nbv do
+     z=max(z,v_view[tc[itc]][3])
+    end
+    add(vispolys,{
      key=z,
-     tri=t
+     poly=tc
     })
    end
   end 
  end
- 
+ cpu["6-det_visible"]=curcpu()
+
  -- proj
  local proj=cam:proj(v_view)
+ cpu["7-proj"]=curcpu()
 
- -- sorting visible tris
- shellsort(vistris)
- 
+ -- sorting visible poly
+ shellsort(vispolys)
+ cpu["8-sortvispolys"]=curcpu()
+
  --light
  local lgt={1,-1,0} 
  v_normz(lgt)
 
- -- drawing visible tris
- for j=#vistris,1,-1 do
-  local itri=vistris[j].tri
-  local v1,v2,v3,c,idx=
-	  proj[itri[1]],
-	  proj[itri[2]],
-	  proj[itri[3]],
-	  itri[4],
-	  itri[5]
---local w1,w2,w3=
---v_view[itri[1]],
---v_view[itri[2]],
---v_view[itri[3]]
+ -- drawing visible poly
+ for j=#vispolys,1,-1 do
+  local ipoly=vispolys[j].poly
+  local v,c,idx={},
+   ipoly[#ipoly-1],
+	  ipoly[#ipoly]
+	 
+		for i=1,#ipoly-2 do
+		 v[i]=proj[ipoly[i]]
+  end
   --color and dither
-  color(c)
+  --color(c)
   local ptn=v_dot(_norms[idx],lgt)
   ptn=flr(ptn*8+8)
   fillp(dith2[flr(ptn)])
-  tri(v1[1],v1[2],v2[1],v2[2],v3[1],v3[2],c)
---  
+  --filling
+  polyfill(v,c)
+
 --fillp()
---line(64+w1[1],128-w1[3],64+w2[1],128-w2[3],8)
---line(64+w3[1],128-w3[3])
---line(64+w1[1],128-w1[3])
+
   -- wireframe
   fillp()
   if wf then
@@ -385,6 +392,9 @@ function _draw()
   end
   
  end
+ 
+ cpu["9-filltris"]=curcpu()
+
  -- test dither
  for i=1,#dith2 do
   color(0x54)
@@ -394,59 +404,54 @@ function _draw()
  fillp()
 
  print("∧"..stat(1)..
-   " tris visible "
-   ..#vistris.." "..curnod.id
+   " poly visible "
+   ..#vispolys.." "..curnod.id
    .."v"..cam.avel
-   ,0,0,7)  
+   ,0,0,7) 
+--print("nodes "..#nodes.polys)
+-- print""
+-- for k,v in pairs(cpu) do
+--  print(k.."  "..v)
+-- end
 end
 
 -->8
--- @p01
-function p01_trapeze_h(l,r,lt,rt,y0,y1)
- lt,rt=(lt-l)/(y1-y0),(rt-r)/(y1-y0)
- if(y0<0)l,r,y0=l-y0*lt,r-y0*rt,0
- y1=min(y1,128)
- for y0=y0,y1 do
-  rectfill(l,y0,r,y0)
-  l+=lt
-  r+=rt
- end
-end
-function p01_trapeze_w(t,b,tt,bt,x0,x1)
- tt,bt=(tt-t)/(x1-x0),(bt-b)/(x1-x0)
- if(x0<0)t,b,x0=t-x0*tt,b-x0*bt,0
- x1=min(x1,128)
- for x0=x0,x1 do
-  rectfill(x0,t,x0,b)
-  t+=tt
-  b+=bt
- end
-end
-function tri(x0,y0,x1,y1,x2,y2,col)
+-- rasterization @fsouchu
+-- polyfill from virtua racing
 
- local x0,y0,x1,y1,x2,y2=
-  band(x0,0xffff),band(y0,0xffff),
-  band(x1,0xffff),band(y1,0xffff),
-  band(x2,0xffff),band(y2,0xffff)
- if(y1<y0)x0,x1,y0,y1=x1,x0,y1,y0
- if(y2<y0)x0,x2,y0,y2=x2,x0,y2,y0
- if(y2<y1)x1,x2,y1,y2=x2,x1,y2,y1
- if max(x2,max(x1,x0))-min(x2,min(x1,x0)) > y2-y0 then
-  col=x0+(x2-x0)/(y2-y0)*(y1-y0)
-  p01_trapeze_h(x0,x0,x1,col,y0,y1)
-  p01_trapeze_h(x1,col,x2,x2,y1,y2)
- else
-  if(x1<x0)x0,x1,y0,y1=x1,x0,y1,y0
-  if(x2<x0)x0,x2,y0,y2=x2,x0,y2,y0
-  if(x2<x1)x1,x2,y1,y2=x2,x1,y2,y1
-  col=y0+(y2-y0)/(x2-x0)*(x1-x0)
-  p01_trapeze_w(y0,y0,y1,col,x0,x1)
-  p01_trapeze_w(y1,col,y2,y2,x1,x2)
- end
--- flip()
+function polyfill(p,col)
+	color(col)
+	local p0,nodes=p[#p],{}
+	local x0,y0=p0[1],p0[2]
+
+	for i=1,#p do
+		local p1=p[i]
+		local x1,y1=p1[1],p1[2]
+		-- backup before any swap
+		local _x1,_y1=x1,y1
+		if(y0>y1) x1=x0 y1=y0 x0=_x1 y0=_y1
+		-- exact slope
+		local dx=(x1-x0)/(y1-y0)
+		if(y0<0) x0-=y0*dx y0=-1
+		-- subpixel shifting (after clipping)
+		local cy0=ceil(y0)--y0\1+1
+		x0+=(cy0-y0)*dx
+		for y=cy0,min(flr(y1),127) do
+			local x=nodes[y]
+			if x then
+				rectfill(x,y,x0,y)
+			else
+				nodes[y]=x0
+			end
+			x0+=dx
+		end
+		-- next vertex
+		x0=_x1
+		y0=_y1
+	end
 end
 -->8
--- @fred72 3d utils and more
+-- @fsouchu 3d utils and more
 function v_cross(a,b)
  local ax,ay,az=a[1],a[2],a[3]
  local bx,by,bz=b[1],b[2],b[3]
@@ -571,67 +576,56 @@ function make_m_from_v_angle(up,ang)
 end
 
 function t_clip(
- v_pln,v_nrm,v_view,triidx)
+ v_pln,v_nrm,v_view,polyidx)
     
- local tri,v_in,v_out={
- v_view[triidx[1]],
- v_view[triidx[2]],
- v_view[triidx[3]]},
+ local poly,v_in,v_out={
+ v_view[polyidx[1]],
+ v_view[polyidx[2]],
+ v_view[polyidx[3]],
+ v_view[polyidx[4]]
+ },
  {},{}
 
- local pdot,d=
+ local pdot,res,d,last=
   v_dot(v_nrm,v_pln),{}
- for i=1,3 do
-  d[i]=v_dot(v_nrm,tri[i])-pdot
-  if d[i]>0 then 
-   add(v_in,i)
+ 
+ for i=1,5 do
+  local j,prevj=
+   (i-1)%4+1,(i-2)%4+1
+  d=v_dot(v_nrm,poly[j])-pdot
+  if last==nil then
+   last=d>0 and "in" or "out"
+  elseif d>0 then 
+   if last=="out" then
+    --calc intersect
+    local v1=
+     v_intsec(v_pln,v_nrm,poly[prevj],poly[j])
+    --add res
+    local idx=max_vrtx+nb_clip+1
+    v_view[idx]=v1
+    nb_clip+=1
+    add(res,idx)
+   end
+   add(res,polyidx[j])
+   last="in"
   else
-   add(v_out,i)
+   if last=="in" then
+    --calc intersect
+    local v1=
+     v_intsec(v_pln,v_nrm,poly[prevj],poly[j])
+    --add res
+    local idx=max_vrtx+nb_clip+1
+    v_view[idx]=v1
+    nb_clip+=1
+    add(res,idx)
+   end
+   last="out"
   end
  end
- if (#v_in==3) return {triidx}
- if #v_in==1 and #v_out==2 then
-  --make a new tri with
-  --inside point and
-  --new points
-  local v1,v2=
-   v_intsec(v_pln,v_nrm,tri[v_in[1]],tri[v_out[1]]),
-   v_intsec(v_pln,v_nrm,tri[v_in[1]],tri[v_out[2]])
-  idx1=max_vrtx+nb_clip+1
-  idx2=idx1+1
-  v_view[idx1],v_view[idx2]=
-   v1,v2
-  nb_clip+=2
-  return {
-   {triidx[v_in[1]],
-   idx1,
-   idx2,
-   triidx[4],
-   triidx[5]}
-  }
- end
- if #v_in==2 and #v_out==1 then
-  local v1,v2=
-   v_intsec(v_pln,v_nrm,tri[v_in[1]],tri[v_out[1]]),
-   v_intsec(v_pln,v_nrm,tri[v_in[2]],tri[v_out[1]])
-  idx1=max_vrtx+nb_clip+1
-  idx2=idx1+1
-  v_view[idx1],v_view[idx2]=
-   v1,v2
-  nb_clip+=2
-  return {
-   {triidx[v_in[1]],
-   triidx[v_in[2]],
-   idx1,
-   triidx[4],
-   triidx[5]},
-   {triidx[v_in[2]],
-   idx1,
-   idx2,
-   triidx[4],
-   triidx[5]}
-  }
- end
+ add(res,polyidx[5])
+ add(res,polyidx[6])
+
+ if (#res>=5) return res
  return nil
 end
 
@@ -686,7 +680,7 @@ end
 -->8
 -- 3d models
 
-local col0, col1,col2,col3,col4,col5,m4ident=
+local col0,col1,col2,col3,col4,col5,m4ident=
  0x01,0x54,0x4f,0x55,0x1c,0x53,
  {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1}
 
@@ -698,12 +692,12 @@ function make_cor(pos,ry)
   {8,0,8},{8,8,8},
   {0,20,8},{-8,8,8},{-8,0,8},
  }
- local ltris={
-  1,2,10,col1, 2,9,10,col1,
-  3,9,2,col1, 3,8,9,col1,
-  3,4,7,col1, 3,7,8,col1,
-  4,5,6,col1, 4,6,7,col1,
-  1,10,5,col2, 10,6,5,col2
+ local lpolys={
+  {1,2,9,10,col1},
+  {2,3,8,9,col1},
+  {3,4,7,8,col1},
+  {4,5,6,7,col1},
+  {1,10,6,5,col2},
  }
 
  transform(lvrtx,
@@ -711,7 +705,7 @@ function make_cor(pos,ry)
  
  return {
   vrtx=lvrtx,
-  tris=ltris,
+  polys=lpolys,
   door_idx=function(self,i)
    if (i==2) return 6
    return 1
@@ -730,15 +724,15 @@ function make_door_joint(da,db)
  local b3=b2+1
  local b4=b3+1
  local b5=b4+1
- local ltris={
-  a5,b2,b1,col0, a4,b2,a5,col0,
-  a4,b3,b2,col0, a3,b3,a4,col0,
-  a3,b4,b3,col0, a2,b4,a3,col0,
-  a2,b5,b4,col0, a1,b5,a2,col0,
+ local lpoly={
+  {a5,a4,b2,b1,col0},
+  {a4,a3,b3,b2,col0}, 
+  {a3,a2,b4,b3,col0}, 
+  {a2,a1,b5,b4,col0},
  }
  return {
   vrtx={},
-  tris=ltris
+  poly=lpoly
  }
 end
 
@@ -754,15 +748,15 @@ function make_cor_joint()
  local b4=b3+1
  local b5=b4+1
 
- local ltris={
-  a5,b2,b1,col0, a4,b2,a5,col0,
-  a4,b3,b2,col0, a3,b3,a4,col0,
-  a3,b4,b3,col0, a2,b4,a3,col0,
-  a2,b5,b4,col0, a1,b5,a2,col0,
+ local lpolys={
+  {a5,a4,b2,b1,col0},
+  {a4,a3,b3,b2,col0},
+  {a3,a2,b4,b3,col0},
+  {a2,a1,b5,b4,col0},
  }
  return {
   vrtx={},
-  tris=ltris
+  polys=lpolys
  }
 end
 
@@ -795,28 +789,27 @@ function make_xcor(pos,ry)
   {-16,0,24},{-16,8,24},
   {-16,20,16},{-16,8,8},{-16,0,8},
  }
- local _tris={
-  1,2,6,col1, 2,7,6,col1,
-  3,7,2,col1, 3,8,7,col1,
-  3,4,9,col1, 3,9,8,col1,
-  4,5,10,col1, 4,10,9,col1,
-  1,6,5,col2, 6,10,5,col2,--end
-  11,12,16,col1, 12,17,16,col1,
-  12,13,17,col1, 13,8,17,col1,
-  13,14,18,col1, 13,18,8,col1,
-  14,15,19,col1, 14,19,18,col1,
-  11,16,15,col2, 15,16,19,col2,--end
-  20,21,10,col1, 21,9,10,col1,
-  21,22,8,col1, 21,8,9,col1,
-  22,23,17,col1, 22,17,8,col1,
-  23,24,16,col1, 23,16,17,col1,
-  10,16,20,col2, 20,16,24,col2,--end
-  29,6,7,col1, 29,7,28,col1,
-  28,7,8,col1, 28,8,27,col1,
-  27,8,18,col1, 27,18,26,col1,
-  26,18,19,col1, 26,19,25,col1,
-  29,25,6,col2, 25,19,6,col2,--end
-  --6,19,10,col0, 19,16,10,col0,
+ local _polys={
+  {1,2,7,6,col1},
+  {3,8,7,2,col1},
+  {3,4,9,8,col1},
+  {4,5,10,9,col1},
+  {1,6,10,5,col2},--end
+  {11,12,17,16,col1},
+  {12,13,8,17,col1},
+  {13,14,18,8,col1},
+  {14,15,19,18,col1},
+  {11,16,19,15,col2},--end
+  {20,21,9,10,col1},
+  {21,22,8,9,col1},
+  {22,23,17,8,col1},
+  {23,24,16,17,col1},
+  {10,16,24,20,col2},--end
+  {28,29,6,7,col1},
+  {27,28,7,8,col1},
+  {26,27,8,18,col1},
+  {25,26,18,19,col1},
+  {29,25,19,6,col2},--end
  }
 
  transform(_vrtx,
@@ -824,7 +817,7 @@ function make_xcor(pos,ry)
  
  return {
   vrtx=_vrtx,
-  tris=_tris,
+  polys=_polys,
   door_idx=function(self,i)
    if (i==4) return 25
    if (i==3) return 20
@@ -843,17 +836,17 @@ function make_corner(pos,ry)
   {16,0,8},{16,8,8},
   {16,20,16},{16,8,24},{16,0,24},
  }
- local _tris={
-  1,2,6,col1, 2,7,6,col1,
-  3,7,2,col1, 3,8,7,col1,
-  3,4,9,col1, 3,9,8,col1,
-  4,5,10,col1, 4,10,9,col1,
-  1,6,5,col2, 6,10,5,col2,--end
-  11,12,10,col1, 12,9,10,col1,
-  12,13,9,col1, 13,8,9,col1,
-  13,14,8,col1, 14,7,8,col1,
-  14,15,7,col1, 15,6,7,col1,
-  6,15,10,col2, 15,11,10,col2,--end
+ local _polys={
+  {1,2,7,6,col1},
+  {2,3,8,7,col1},
+  {3,4,9,8,col1},
+  {4,5,10,9,col1},
+  {1,6,10,5,col2},--end
+  {11,12,9,10,col1},
+  {12,13,8,9,col1},
+  {13,14,7,8,col1},
+  {14,15,6,7,col1}, 
+  {6,15,11,10,col2},--end
  }
 
  transform(_vrtx,
@@ -861,7 +854,7 @@ function make_corner(pos,ry)
  
  return {
   vrtx=_vrtx,
-  tris=_tris,
+  polys=_polys,
   door_idx=function(self,i)
    if (i==2) return 11
    return 1
@@ -881,20 +874,20 @@ function make_tcor(pos,ry)
   {16,20,16},{16,8,24},{16,0,24},
   {-8,0,8},{-8,0,24}
  }
- local _tris={
-  1,2,13,col1, 2,12,13,col1,
-  3,12,2,col1, 3,11,12,col1,
-  4,7,3,col1, 3,7,6,col1,
-  5,8,4,col1, 4,8,7,col1,
-  5,1,8,col2, 1,21,8,col2,--end
-  10,11,15,col1, 11,6,15,col1,
-  9,10,14,col1, 10,15,14,col1,
-  14,22,9,col2, 22,13,9,col2,--end
-  16,17,8,col1, 17,7,8,col1,
-  17,18,7,col1, 18,6,7,col1,
-  18,19,15,col1, 18,15,6,col1,
-  19,20,14,col1, 19,14,15,col1,
-  16,8,14,col2, 16,14,20,col2,--end
+ local _polys={
+  {1,2,12,13,col1},
+  {3,11,12,2,col1},
+  {4,7,6,3,col1},
+  {5,8,7,4,col1}, 
+  {5,1,21,8,col2},--end
+  {10,11,6,15,col1},
+  {9,10,15,14,col1},
+  {14,22,13,9,col2},--end
+  {16,17,7,8,col1},
+  {17,18,6,7,col1},
+  {18,19,15,6,col1},
+  {19,20,14,15,col1},
+  {16,8,14,20,col2},--end
  }
 
  transform(_vrtx,
@@ -902,7 +895,7 @@ function make_tcor(pos,ry)
  
  return {
   vrtx=_vrtx,
-  tris=_tris,
+  polys=_polys,
   door_idx=function(self,i)
    if (i==3) return 16
    if (i==2) return 9
@@ -912,17 +905,27 @@ function make_tcor(pos,ry)
 end
 -->8
 -- optimization with graph node
+lastcpu=0
+function resetcpu()
+ lastcpu=0
+end
 
-function make_node(a,_tris)
- local vstart=vrtx[_tris[1]]
+function curcpu()
+ local cpu=stat(1)
+ local res=cpu-lastcpu 
+ lastcpu=cpu
+ return res
+end
+function make_node(a,_polys)
+ local vstart=vrtx[_polys[1][1]]
  -- init x z with first vrtx
  local minx,minz,maxx,maxz=
    vstart[1],vstart[3],
    vstart[1],vstart[3]
- for i=1,#_tris,4 do
-  local idx=(i-1)%4
-  if idx>=0 and idx<3 then
-   local v=vrtx[_tris[i]]
+ for poly in all(_polys) do
+  --for each vrtx,last is color
+  for i=1,#poly-1 do 
+   local v=vrtx[poly[i]]
    minx=min(minx,v[1])
    minz=min(minz,v[3])
    maxx=max(maxx,v[1])
@@ -933,8 +936,8 @@ function make_node(a,_tris)
  return {
   id=a,
   conn={},
-  tris=_tris,
-  norms=init_norm(vrtx,_tris),
+  polys=_polys,
+  norms=init_norm(vrtx,_polys),
   minx=minx,
   minz=minz,
   maxx=maxx,
@@ -958,30 +961,40 @@ function link_nodes(a,b)
  add(conn_b,nodea)
 end
 
-function getnodtris(nod)
- local _tris,_norms,_w={},{},{}
- add_all(_tris,nod.tris)
+function getnodpolys(nod)
+ local _polys,_norms,_w={},{},{}
+ add_all(_polys,nod.polys)
  add_all(_norms,nod.norms)
  _w[nod.id]=true
+-- print("adding"..nod.id)
+-- print("chld.polys"..#nod.polys)
+ 
  -- take 2 nodes deep
- addchildnodtris(
-  1,nod,_tris,_norms,_w)
+ addchildnodpolys(
+  1,nod,_polys,_norms,_w)
 
+--print(#_w,32,96)
+--print(#_polys,96)
+-- for k,v in pairs(_w) do
+--  print(k..""..tostr(v))
+-- end
  return {
-  tris=_tris,
+  polys=_polys,
   norms=_norms
  }
 end
 
-function addchildnodtris(
- lvl,nod,_tris,_norms,_w)
+function addchildnodpolys(
+ lvl,nod,_polys,_norms,_w)
  lvl-=1
  for chld in all(nod.conn) do
   if lvl>=0 then
-   addchildnodtris(lvl,chld,_tris,_norms,_w)
+   addchildnodpolys(lvl,chld,_polys,_norms,_w)
    if not _w[chld.id] then
+--    print("adding"..chld.id)
+--    print("chld.poly"..#chld.poly)
     _w[chld.id]=true
-    add_all(_tris,chld.tris)
+    add_all(_polys,chld.polys)
     add_all(_norms,chld.norms)
    end
   end
