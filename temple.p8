@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 18
+version 29
 __lua__
 -- temple corridor demo
 -- @yourykiki
@@ -18,7 +18,7 @@ local dith={
  0xf5f5,0xfdf5,0xfdf7,0xffff
 }
 local dith2={
- 0x0000,0x8000,0x8020,0xc020,
+ 0x0000,0x0000,0x8020,0xc020,
  0xc060,0xc070,0xe070,0xe470,
  0xe472,0xf472,0xf4f2,0xf5f2,
  0xf5fa,0xf7fa,0xf7fe,0xffff
@@ -26,11 +26,11 @@ local dith2={
 
 function init_cam()
  return {
-  pos={0,6,0},
+  pos={0,6,0,rayon=2},
   ang=0.25,
   fvel=0,--forward
   svel=0,--strafe
-  avel=0,
+  avel=0,--angle
   m={},
   --move forward
   fwd=function(self)
@@ -115,6 +115,29 @@ function init_cam()
     }
    end
    return vert
+  end,
+  collision=function(self,walls)
+   local c=self.pos
+   for wall in all(walls) do
+    local a,b=wall[1],wall[2]
+    local pcol=coldroitecerc(a,b,c)
+--    if (pcol) return true
+    if pcol~=nil then
+     -- collision response 
+     local n={pcol[1]-c[1],
+       pcol[2]-c[3],0}
+     v_normz(n)
+     n={n[1]*c.rayon,n[2]*c.rayon}
+     n={c[1]+n[1]-pcol[1],
+      c[3]+n[2]-pcol[2]}
+     self.pos[1]-=n[1]
+     self.pos[3]-=n[2]
+--     cx=c.x-n.x
+--     cy=c.y-n.y
+--     c=vec(cx,cy)
+--     c.rayon=5
+    end
+   end
   end
  }
 end
@@ -138,8 +161,8 @@ end
 function _init()
  cam=init_cam()
 -- nbvrt=#vrtx
--- init_ring()
- init_lvl()
+ init_ring()
+-- init_lvl()
 end
 
 function init_lvl()
@@ -218,14 +241,16 @@ function init_ring()
  for i=0,nb-1 do
   local m=make_cor(pos,a*i)
   local _polys=add_model(m)
- 	
+ 	local _walls=m.walls
   d={sin(a*i)*24,0,cos(a*i)*24}
   v_add(pos,d)
   if i>0 then
    local mj=make_cor_joint()
    add_all(_polys,mj.polys)
+   add_all(_walls,mj.walls)
   end
-  add(nodes,make_node(i+1,_polys))
+  add(nodes,
+   make_node(i+1,_polys,_walls))
  end
  for i=1,nb do
   local j=(i%nb+1)
@@ -233,6 +258,8 @@ function init_ring()
  end
 end
 
+-- add mdl vrtx to world vrtx
+-- update polygone vrtx index
 function add_model(mdl)
 --print("max_vrtx"..max_vrtx)
  mdl.start_vrtx=max_vrtx
@@ -273,6 +300,11 @@ resetcpu()
  -- on which node camera is ?
  curnod=get_curnod(cam.pos,curnod)
  cpu["2-curnod"]=curcpu()
+ 
+ --iciici can have multiple curnod
+ --on current node, 
+ --test walls collision
+ collision=cam:collision(curnod.walls)
 end
 
 function _draw()
@@ -372,8 +404,8 @@ function _draw()
   --color and dither
   --color(c)
   local ptn=v_dot(_norms[idx],lgt)
-  ptn=flr(ptn*8+8)
-  fillp(dith2[flr(ptn)])
+  ptn=(ptn*8+8)\1
+  fillp(dith2[ptn\1])
   --filling
   polyfill(v,c)
 
@@ -408,6 +440,7 @@ function _draw()
    ..#vispolys.." "..curnod.id
    .."v"..cam.avel
    ,0,0,7) 
+ if (collision) circfill(8,8,4,8)
 --print("nodes "..#nodes.polys)
 -- print""
 -- for k,v in pairs(cpu) do
@@ -434,9 +467,10 @@ function polyfill(p,col)
 		local dx=(x1-x0)/(y1-y0)
 		if(y0<0) x0-=y0*dx y0=-1
 		-- subpixel shifting (after clipping)
-		local cy0=ceil(y0)--y0\1+1
+		local cy0=(y0&0xffff)+1
+--		local cy0=y0\1+1
 		x0+=(cy0-y0)*dx
-		for y=cy0,min(flr(y1),127) do
+		for y=cy0,min(y1\1,127) do
 			local x=nodes[y]
 			if x then
 				rectfill(x,y,x0,y)
@@ -702,10 +736,16 @@ function make_cor(pos,ry)
 
  transform(lvrtx,
   pos[1],pos[2],pos[3],ry)
+
+ local lwalls={
+  {lvrtx[1],lvrtx[10]},
+  {lvrtx[6],lvrtx[5]}
+ }
  
  return {
   vrtx=lvrtx,
   polys=lpolys,
+  walls=lwalls,
   door_idx=function(self,i)
    if (i==2) return 6
    return 1
@@ -754,9 +794,14 @@ function make_cor_joint()
   {a3,a2,b4,b3,col0},
   {a2,a1,b5,b4,col0},
  }
+ local _walls={
+  {vrtx[a1],vrtx[b5]},
+  {vrtx[a5],vrtx[b1]}
+ }
  return {
   vrtx={},
-  polys=lpolys
+  polys=lpolys,
+  walls=_walls
  }
 end
 
@@ -916,7 +961,7 @@ function curcpu()
  lastcpu=cpu
  return res
 end
-function make_node(a,_polys)
+function make_node(a,_polys,_walls)
  local vstart=vrtx[_polys[1][1]]
  -- init x z with first vrtx
  local minx,minz,maxx,maxz=
@@ -942,6 +987,7 @@ function make_node(a,_polys)
   minz=minz,
   maxx=maxx,
   maxz=maxz,
+  walls=_walls,
   inbound=function(self,p)
    return self.minx<=p[1]
     and p[1]<=self.maxx 
@@ -971,7 +1017,7 @@ function getnodpolys(nod)
  
  -- take 2 nodes deep
  addchildnodpolys(
-  1,nod,_polys,_norms,_w)
+  2,nod,_polys,_norms,_w)
 
 --print(#_w,32,96)
 --print(#_polys,96)
@@ -1020,6 +1066,47 @@ function get_curnod(pos,pnod)
  return nodes[1]
 end
 
+-->8
+-- point a
+-- point b
+-- cercle c
+function coldroitecerc(a,b,c)
+ local ab,ac=
+  {b[1]-a[1],b[3]-a[3]},
+  {c[1]-a[1],c[3]-a[3]}
+ -- norme du vecteur v
+ local num=ab[1]*ac[2]-ab[2]*ac[1]
+ -- valeur absolue
+-- num=abs(num)
+ if (num<0) num=-num
+ -- norme de u
+ local denom=sqrt(ab[1]*ab[1]+ab[2]*ab[2])
+ local ci=num/denom
+ if (ci>=c.rayon) return nil
+ -- collision avec la droite
+ -- collision avec segment ?
+ local bc={c[1]-b[1],c[3]-b[3]}
+ local psc1=ab[1]*ac[1]+ab[2]*ac[2]
+ local psc2=(-ab[1])*bc[1]+(-ab[2])*bc[2]
+ if psc1>=0 and psc2>=0 then
+  local ti=psc1/(ab[1]*ab[1]+ab[2]*ab[2])
+  return {a[1]+ti*ab[1],
+          a[3]+ti*ab[2]}
+--  return true
+ end
+ -- a dans cercle ?
+ -- b dans cercle ?
+-- if (colpointcerc(a,c)) return a
+-- if (colpointcerc(b,c)) return b
+ return nil
+end
+ 
+function colpointcerc(a,c)
+ local r=c.rayon
+ return 
+  v_len({c[1]-a[1],0,c[3]-a[3]})
+   <r
+end
 __gfx__
 60006000606060606060606060606060666066606666666666666666666666666000600066006600660066606660666066666666666666666666666666666666
 00000000000000000600060006060606060606060606060666066606666666660000000000000000000000000600060006000600060606060666066666666666
@@ -1037,6 +1124,14 @@ __gfx__
 66066606666666660000000000000000060006000606060606060606060606060000000000000000000000000000000000000000000000000000000000000000
 66666666666666660000006000606060606060606060606060606066606666660000000000000000000000000000000000000000000000000000000000000000
 06060666066666660000000000000000000000060006060606060606060606060000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+536f7000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+1356f700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+12356f70000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __label__
 44444444777454447774777477747544554477747774777457745554757477745774777477757555777555557755777575555555775575757775555555555555
 74447444747444447474447474747444444447447474474474444444757447447544474475747544754445444745757575454545475575757575455555555555
