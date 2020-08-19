@@ -4,44 +4,40 @@ __lua__
 -- 3d model editor
 -- @yourykiki
 
+-- moving vrtx
+-- edit face colors
+-- export/import model
+
 local c_top,c_side,c_front,c_3d,
- mdl,mrk_mdl
+ mdl,mrk_mdl,c_current,ivrtx
+local top,sid,fro=
+ {1,3},{1,2},{3,2}
+
+--0 no selection
+--1 mouse select begin
+--2 mouse select end
+--3 move with keyb
+--  or drag with mouse
+local updstate,
+ us_noselect,
+ us_select,
+ us_editvrtx=0,0,1,2
 
 function _init()
  -- devkit mode
  poke(0x5f2d, 1)
  -- init cam
  c_top,c_side,c_front,c_3d=
-  init_cam("t",64, 0),
-  init_cam("s",64,64),
-  init_cam("f", 0,64),
+  init_cam("t",64, 0,top),
+  init_cam("s",64,64,sid),
+  init_cam("f", 0,64,fro),
   init_cam("3d",0, 0)
  -- load default model
  mdl=make_cube({0,0,0},0)
  mrk_mdl=make_marker()
 end
 
-function _update()
- local mx,my=
-  stat(32),
-  stat(33) 
-  
- c_top:setfocus(mx,my)
- c_side:setfocus(mx,my)
- c_front:setfocus(mx,my)
- c_3d:setfocus(mx,my)
-end
-
-function _draw()
- cls''
- draw_mdl(c_top)
- draw_mdl(c_side)
- draw_mdl(c_front)
- draw_mdl(c_3d)
- spr(0,stat(32)-1,stat(33)-1)
-end
-
-function init_cam(name,vx,vy)
+function init_cam(name,vx,vy,ax)
  return {
   name=name,
   pos={0,6,-10},
@@ -49,41 +45,18 @@ function init_cam(name,vx,vy)
   view={w=64,h=64,x=vx,y=vy},
   m={},
   focus=false,
-  projtop=function(self,vrtx)
+  ax=ax,
+  sel={x1=0,y1=0,x2=0,y2=0,a=false},
+  p_vrtx={},
+  proj2d=function(self,vrtx)
    local vert,w,h={},
     self.view.w/2,
     self.view.h/2
    for i=1,#vrtx do 
     local pnt=vrtx[i]
     vert[i]={
-     pnt[1]+w,
-     -pnt[3]+h
-    }
-   end
-   return vert
-  end,
-  projsid=function(self,vrtx)
-   local vert,w,h={},
-    self.view.w/2,
-    self.view.h/2
-   for i=1,#vrtx do 
-    local pnt=vrtx[i]
-    vert[i]={
-     pnt[1]+w,
-     -pnt[2]+h
-    }
-   end
-   return vert
-  end,
-  projfro=function(self,vrtx)
-   local vert,w,h={},
-    self.view.w/2,
-    self.view.h/2
-   for i=1,#vrtx do 
-    local pnt=vrtx[i]
-    vert[i]={
-     pnt[3]+w,
-     -pnt[2]+h
+     pnt[ax[1]]+w,
+     -pnt[ax[2]]+h
     }
    end
    return vert
@@ -97,9 +70,9 @@ function init_cam(name,vx,vy)
     self.m=m_vw
   end,
   proj=function(self,vrtx)
-   if (name=="t") return self:projtop(vrtx)
-   if (name=="s") return self:projsid(vrtx)
-   if (name=="f") return self:projfro(vrtx)
+   if name~="3d" then
+    return self:proj2d(vrtx)
+   end
    return self:proj3d(vrtx)
   end,
   proj3d=function(self,vrtx)
@@ -122,11 +95,126 @@ function init_cam(name,vx,vy)
    self.focus=
     v.x<mx and mx<=(v.x+v.w) and
     v.y<my and my<=(v.y+v.h)
+  end,
+  drawsel=function(self)
+   local sel=self.sel
+   if sel.a then
+    fillp(0x5a5a)
+    rect(sel.x1,sel.y1,
+     sel.x2,sel.y2,0x57)
+    fillp()
+   end
+  end,
+  startselect=function(self,mx,my)
+   local sel,v=self.sel,self.view
+   sel.x1,sel.y1,
+   sel.x2,sel.y2,
+   sel.a=mx-v.x,my-v.y,mx-v.x,my-v.y,true
+  end,
+  updselect=function(self,mx,my)
+   local sel,v=self.sel,self.view
+   sel.x2,sel.y2=mx-v.x,my-v.y
+  end,
+  endselect=function(self)
+   self.sel.a=false
+   local selvrtx={}
+   self:sortsel()
+   for k,v in pairs(self.p_vrtx) do
+    if self:vinsel(v)  then
+     add(selvrtx,k)
+    end
+   end
+   ivrtx=selvrtx
+  end,
+  vinsel=function(self,v)
+   local sel,vx,vy=self.sel,
+    v[1],v[2]   
+   return
+    sel.x1<=vx and vx<=sel.x2 and
+    sel.y1<=vy and vy<=sel.y2
+  end,
+  sortsel=function(self)
+   local sel=self.sel
+   if sel.x1>sel.x2 then
+    sel.x1,sel.x2=sel.x2,sel.x1
+   end
+   if sel.y1>sel.y2 then
+    sel.y1,sel.y2=sel.y2,sel.y1
+   end
+  end,
+  moveselvrtx=function(self,bl,br,bu,bd,vrtx)
+   for i in all(ivrtx) do
+    if (bl) vrtx[i][ax[1]]-=1
+    if (br) vrtx[i][ax[1]]+=1
+    if (bu) vrtx[i][ax[2]]+=1
+    if (bd) vrtx[i][ax[2]]-=1
+   end
   end
  }
 end
 
-function draw_mdl(cam)
+function _update()
+ local mx,my,mb,dw=
+  stat(32),stat(33),stat(34),stat(36)
+  
+ if updstate==us_noselect then
+  update_focus(mx,my)
+  if mb&1==1 then
+   -- store mx,my start
+   c_current:startselect(mx,my)
+   updstate=us_select
+  end
+ elseif updstate==us_select then
+  c_current:updselect(mx,my)
+  if mb&1==0 then
+   -- store mx,my end
+   c_current:endselect()
+   -- check if vrtx selected
+   if #ivrtx>0 then
+    updstate=us_editvrtx
+   else
+    updstate=us_noselect
+   end
+  end
+ elseif updstate==us_editvrtx then
+  update_focus(mx,my)
+  local bl,br,bu,bd=
+   btn(⬅️),btn(➡️),
+   btn(⬆️),btn(⬇️)
+  
+  c_current:moveselvrtx(
+   bl,br,bu,bd,mdl.vrtx)
+  
+  --back to selection
+  if mb&1==1 then
+   ivrtx={}
+   updstate=us_noselect
+  end
+ end
+end
+
+function update_focus(mx,my)
+ c_top:setfocus(mx,my)
+ c_side:setfocus(mx,my)
+ c_front:setfocus(mx,my)
+ c_3d:setfocus(mx,my)
+ 
+ if (c_top.focus) c_current=c_top
+ if (c_side.focus) c_current=c_side
+ if (c_front.focus) c_current=c_front
+ if (c_3d.focus) c_current=c_3d
+end
+
+function _draw()
+ cls''
+ draw_cam(c_top)
+ draw_cam(c_side)
+ draw_cam(c_front)
+ draw_cam(c_3d)
+ spr(0,stat(32)-1,stat(33)-1)
+end
+
+function draw_cam(cam)
  local vport=cam.view
  camera(-vport.x,-vport.y)
  clip(vport.x,vport.y,vport.w,vport.h)
@@ -135,29 +223,37 @@ function draw_mdl(cam)
   rect(0,0,vport.w-1,vport.h-1,7)
  end
  -- draw origin marker
- local vrtx={}
- add_all(vrtx,mrk_mdl.vrtx)
- 
- vrtx=cam:proj(vrtx)
- draw_lin(vrtx,mrk_mdl.lins)
+ draw_marker(cam,mrk_mdl)
  -- draw model
- vrtx={}
+ local vrtx={}
  add_all(vrtx,mdl.vrtx)
- transform(vrtx,
-  0,-4,8,0)
- 
+ -- apply 3d camera
+ -- fixme handle 3d camera position
+ if cam.name=="3d" then 
+  transform(vrtx,0,-4,10,0)
+ end
  -- draw model
  --proj
  vrtx=cam:proj(vrtx)
+ cam.p_vrtx=vrtx
+ --draw
  for poly in all(mdl.polys) do
   draw_wire(vrtx,poly)
  end
- for poly in all(mdl.polys) do
-  draw_point(vrtx)
+ -- draw all vertex
+ draw_point(vrtx,5)
+-- local ivrtx=cam.sel.ivrtx
+ if ivrtx then
+  -- draw selected vrtx
+  local selvrtx={}
+  for iv in all(ivrtx) do
+   add(selvrtx,vrtx[iv])
+  end
+  draw_point(selvrtx,11)
  end
  --
-
- print(cam.name,2,2)
+ cam:drawsel()
+ print(cam.name,2,2,6)
  clip()
 end
 
@@ -172,9 +268,9 @@ function draw_wire(vrtx,poly)
  end
 end
 
-function draw_point(vrtx)
+function draw_point(vrtx,col)
  for v in all(vrtx) do
-  line(v[1],v[2],v[1],v[2],5)
+  line(v[1],v[2],v[1],v[2],col)
  end
 end
 
@@ -186,6 +282,14 @@ function draw_lin(vrtx,lins)
   line(v1[1],v1[2],v2[1],v2[2],5)
  end
  fillp()
+end
+
+function draw_marker(cam,mrk_mdl)
+ local vrtx={}
+ add_all(vrtx,mrk_mdl.vrtx)
+ 
+ vrtx=cam:proj(vrtx)
+ draw_lin(vrtx,mrk_mdl.lins)
 end
 -->8
 --3d maths utils
@@ -318,11 +422,11 @@ end
 __gfx__
 50000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 55000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-51500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-51150000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-51115000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-51111500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-55115000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+56500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+56650000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+56665000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+56666500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+55665000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00550000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __label__
 11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
@@ -454,3 +558,6 @@ __label__
 10000000000000000000000000000000000000000000000000000000000000011000000000000000000000000000000000000000000000000000000000000001
 11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
 
+__sfx__
+010200003c05335053300532c0532905326053220531e0531a0531705313053110530d0530a053070530405300003000030000100001000000000000000000000000000000000000000000000000000000000000
+0014000009450184502c450150500c05007050040500305005050046500765007250077500875009750097500a7500975009750097500b7500f750167501975019750167501a75017750167501b750127500e750
