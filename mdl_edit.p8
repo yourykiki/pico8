@@ -4,9 +4,9 @@ __lua__
 -- 3d model editor
 -- @yourykiki
 
--- moving vrtx
 -- edit face colors
 -- export/import model
+-- copy each mdl state in stack
 
 local c_top,c_side,c_front,c_3d,
  mdl,mrk_mdl,c_current,ivrtx
@@ -22,6 +22,11 @@ local updstate,
  us_noselect,
  us_select,
  us_editvrtx=0,0,1,2
+
+local mousemode,
+ mm_point,
+ mm_drag,
+ drag_orig=0,0,1
 
 function _init()
  -- devkit mode
@@ -106,14 +111,15 @@ function init_cam(name,vx,vy,ax)
    end
   end,
   startselect=function(self,mx,my)
-   local sel,v=self.sel,self.view
+   local sel,view=self.sel,self.view
    sel.x1,sel.y1,
-   sel.x2,sel.y2,
-   sel.a=mx-v.x,my-v.y,mx-v.x,my-v.y,true
+   sel.x2,sel.y2, sel.a=
+    mx-view.x,my-view.y,
+    mx-view.x,my-view.y, true
   end,
   updselect=function(self,mx,my)
-   local sel,v=self.sel,self.view
-   sel.x2,sel.y2=mx-v.x,my-v.y
+   local sel,view=self.sel,self.view
+   sel.x2,sel.y2=mx-view.x,my-view.y
   end,
   endselect=function(self)
    self.sel.a=false
@@ -149,7 +155,27 @@ function init_cam(name,vx,vy,ax)
     if (bu) vrtx[i][ax[2]]+=1
     if (bd) vrtx[i][ax[2]]-=1
    end
-  end
+  end,
+  movedragselvrtx=function(self,dx,dy,vrtx)
+   for i in all(ivrtx) do
+    vrtx[i][ax[1]]+=dx
+    vrtx[i][ax[2]]-=dy
+   end
+  end,
+  nearvrtx=function(self,mx,my)
+   local res,view=false,self.view
+   local _mx,_my=
+    mx-view.x,my-view.y
+   for i in all(ivrtx) do
+    local v=self.p_vrtx[i]
+    local vx1,vx2,vy1,vy2=
+     v[1]-3,v[1]+3,v[2]-3,v[2]+3
+    res=res or (
+     vx1<=_mx and _mx<=vx2 and
+     vy1<=_my and _my<=vy2)
+   end
+   return res
+  end,
  }
 end
 
@@ -177,18 +203,45 @@ function _update()
    end
   end
  elseif updstate==us_editvrtx then
-  update_focus(mx,my)
+  if mousemode==mm_point then
+   update_focus(mx,my)
+  elseif mousemode==mm_drag then
+   dx,dy=mx-drag_orig[1],
+         my-drag_orig[2]
+   c_current:movedragselvrtx(
+     dx,dy,mdl.vrtx)
+   drag_orig={mx,my}
+   -- 
+   if mb&1==0 then
+    mousemode=mm_point
+    return
+   end
+  end
+  
   local bl,br,bu,bd=
    btn(⬅️),btn(➡️),
    btn(⬆️),btn(⬇️)
   
   c_current:moveselvrtx(
    bl,br,bu,bd,mdl.vrtx)
+   
+  if mb&1==1 and mousemode==mm_point then
+   if c_current:nearvrtx(mx,my) then
+    --dragmove mode on
+    mousemode=mm_drag
+    drag_orig={mx,my}
+   else
+    --back to selection
+    ivrtx={}
+    updstate=us_noselect
+   end
+  end
   
-  --back to selection
-  if mb&1==1 then
-   ivrtx={}
-   updstate=us_noselect
+  if mousemode==mm_drag then
+   -- dragmove
+   if mb&1==0 then
+    mousemode=mm_point
+   end
   end
  end
 end
@@ -204,6 +257,7 @@ function update_focus(mx,my)
  if (c_front.focus) c_current=c_front
  if (c_3d.focus) c_current=c_3d
 end
+
 
 function _draw()
  cls''
@@ -559,5 +613,5 @@ __label__
 11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
 
 __sfx__
-010200003c05335053300532c0532905326053220531e0531a0531705313053110530d0530a053070530405300003000030000100001000000000000000000000000000000000000000000000000000000000000
+000200003c05335053300532c0532905326053220531e0531a0531705313053110530d0530a053070530405300003000030000100001000000000000000000000000000000000000000000000000000000000000
 0014000009450184502c450150500c05007050040500305005050046500765007250077500875009750097500a7500975009750097500b7500f750167501975019750167501a75017750167501b750127500e750
