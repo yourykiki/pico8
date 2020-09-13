@@ -4,8 +4,11 @@ __lua__
 -- 3d model editor
 -- @yourykiki
 
+-- draw near vrtx
+-- draw near vrtx selected
 -- edit face colors
--- export/import model
+-- add volume
+-- add toolbar for imp/exp
 -- copy each mdl state in stack
 
 local c_top,c_side,c_front,c_3d,
@@ -190,6 +193,11 @@ function _update()
    c_current:startselect(mx,my)
    updstate=us_select
   end
+  
+  if mb&2==2 then
+   --export(mdl)
+   import()
+  end
  elseif updstate==us_select then
   c_current:updselect(mx,my)
   if mb&1==0 then
@@ -224,7 +232,7 @@ function _update()
   
   c_current:moveselvrtx(
    bl,br,bu,bd,mdl.vrtx)
-   
+    
   if mb&1==1 and mousemode==mm_point then
    if c_current:nearvrtx(mx,my) then
     --dragmove mode on
@@ -470,6 +478,120 @@ end
 function add_all(a,b)
  for x in all(b) do
   add(a,x)
+ end
+end
+
+-->8
+-- export 
+
+function export(mdl)
+ -- format string
+ local str=table_to_str(mdl)
+ -- to clipboard
+ printh(str,"@clip")
+ sfx(0)
+end
+
+function table_to_str(tbl)
+	local str,i="{",1
+	for k,val in pairs(tbl) do
+	 if k==i then
+	  i+=1
+	 else
+ 	 str=str..k.."="
+	 end
+	 local t=type(val)
+	 --type=string,number,boolean
+	 if t=="table" then
+   str=str..table_to_str(val)..","
+-- 	 str=str.."\n"
+	 else
+   str=str..val..","
+	 end
+	end
+	if sub(str,#str,#str)=="," then 
+	 str=sub(str,1,#str-1) 
+ end
+ return str.."}"
+end
+
+function import()
+ -- from clipboard
+ local past_str=stat(4)
+ local _mdl=tbl_parse(past_str)
+ export(_mdl)
+ -- test vrtx/polys...
+-- assert(_mdl.vrtx)
+-- assert(_mdl)
+-- assert(_mdl)
+ mdl=_mdl
+end
+
+
+-- import 
+function match(s,tokens)
+  for i=1,#tokens do
+    if(s==sub(tokens,i,i)) return true
+  end
+  return false
+end
+
+function parse_num_val(str,pos,val)
+ val=val or ''
+ local c=sub(str,pos,pos)
+ if(not match(c,"-xb0123456789abcdef.")) return tonum(val),pos
+ return parse_num_val(str,pos+1,val..c)
+end
+
+-- parse a string delimited with "
+-- or a raw string [a-z0-9_-]
+-- or a true false to boolean
+function parse_str_val(str,pos,val,delim)
+ local c=sub(str,pos,pos)
+ if delim=='"' then
+  if (c=='"') return val,pos+1
+ elseif not match(c,"abcdefghijklmnopqrstuvwxyz0123456789_-") then
+  if val=="true" or val=="false" then
+   val=val=="true"
+  end
+  return val,pos
+ end
+ return parse_str_val(str,pos+1,val..c,delim)
+end
+
+function nxt_delim(str,pos)
+ local c=sub(str,pos,pos)
+ if (c==',' or c=='=' or c=='}') return c,pos
+ return nxt_delim(str,pos+1) 
+end
+
+function tbl_parse(str,pos)
+ pos=pos or 1
+ local first=sub(str,pos,pos)
+ if first=='{' then
+  local obj={}
+  pos+=1
+  while true do
+   res,pos=tbl_parse(str,pos)
+   if (res==nil) return obj,pos
+   tk,pos=nxt_delim(str,pos)
+   -- if = bef ,} parse after =
+   if tk=="=" then
+    key,val,pos=res,tbl_parse(str,pos+1)
+    obj[key]=val
+   else
+    add(obj,res)
+   end
+   if (sub(str,pos,pos)==',')  pos+=1
+  end
+ elseif first=='}' then
+  return nil,pos+1
+ elseif match(first,"-0123456789") then
+  return parse_num_val(str,pos)
+ elseif first=='"' then
+  return parse_str_val(str,pos+1,'','"')
+ else
+  return parse_str_val(str,pos,"")
  end
 end
 
