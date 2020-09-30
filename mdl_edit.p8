@@ -9,11 +9,10 @@ __lua__
 -- edit face colors
 -- add volume
 -- copy each mdl state in stack
--- modal for copy/paste
 
 local c_top,c_side,c_front,c_3d,
  mdl,mrk_mdl,c_current,ivrtx,
- toolb
+ toolb,modal
 local top,sid,fro=
  {1,3},{1,2},{3,2}
 
@@ -185,13 +184,38 @@ function init_cam(name,vx,vy,ax)
  }
 end
 
+function init_modal(msg,fnc,w,h)
+ resetkeys()
+ return {
+  msg=msg,
+  fnc=fnc,
+  w=w,h=h,
+  update=function(self,mx,my,mb)
+   if keypaste() then 
+    self.fnc()
+    modal=nil
+   elseif mb&2==2 then 
+    modal=nil
+   end
+  end,
+  draw=function(self)
+   local sx,sy=(128-w)/2,(128-h)/2
+   rectfill(sx,sy,sx+w,sy+h,8)
+   print(self.msg,sx+1,sy+1,6)
+  end
+ }
+end
+
 function init_toolbar()
  return {
   actions={
    {
     icon=1,
     onclick=function()
-     import()
+     modal=init_modal(
+      "paste model or\npress mouse button 2",
+      import,96,12
+     )
     end
    },
    {
@@ -233,7 +257,10 @@ function _update()
   stat(32),stat(33),stat(34),stat(36)
  
  toolb:update(mx,my,mb,dw)
- 
+ if modal then
+  modal:update(mx,my,mb)
+  return
+ end
  if updstate==us_noselect then
   update_focus(mx,my)
   if mb&1==1 then
@@ -319,6 +346,11 @@ function _draw()
  draw_cam(c_3d)
  camera()
  toolb:draw()
+
+ if modal then
+  modal:draw()
+ end
+
  spr(0,stat(32)-1,stat(33)-1)
 end
 
@@ -527,6 +559,21 @@ function add_all(a,b)
  end
 end
 
+--
+function keypaste()
+ local c_v,kp=false
+ while stat(30) do
+  kp=ord(stat(31))
+  c_v=c_v or kp==213
+ end
+ return c_v
+end
+
+function resetkeys()
+ while (stat(30)) do
+  stat(31)
+ end
+end
 -->8
 -- export 
 
