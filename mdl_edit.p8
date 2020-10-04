@@ -7,12 +7,13 @@ __lua__
 -- draw near vrtx
 -- draw near vrtx selected
 -- edit face colors
--- add volume
+-- add more volumes
 -- copy each mdl state in stack
+-- handle mouse down/up event
 
 local c_top,c_side,c_front,c_3d,
  mdl,mrk_mdl,c_current,ivrtx,
- toolb,modal
+ toolb,modal,ctx_mnu
 local top,sid,fro=
  {1,3},{1,2},{3,2}
 
@@ -30,6 +31,24 @@ local mousemode,
  mm_point,
  mm_drag,
  drag_orig=0,0,1
+
+local add_mnu={
+ { caption="add cube",
+   onclick=function()
+    add_cube()
+   end
+ },
+ { caption="item 2",
+   onclick=function()
+    sfx(2)
+   end
+ },
+ { caption="item 3",
+   onclick=function()
+    sfx(2)
+   end
+ }
+}
 
 function _init()
  -- devkit mode
@@ -131,7 +150,7 @@ function init_cam(name,vx,vy,ax)
    local selvrtx={}
    self:sortsel()
    for k,v in pairs(self.p_vrtx) do
-    if self:vinsel(v)  then
+    if self:vinsel(v) then
      add(selvrtx,k)
     end
    end
@@ -173,11 +192,13 @@ function init_cam(name,vx,vy,ax)
     mx-view.x,my-view.y
    for i in all(ivrtx) do
     local v=self.p_vrtx[i]
-    local vx1,vx2,vy1,vy2=
-     v[1]-3,v[1]+3,v[2]-3,v[2]+3
-    res=res or (
-     vx1<=_mx and _mx<=vx2 and
-     vy1<=_my and _my<=vy2)
+    if v then
+     local vx1,vx2,vy1,vy2=
+      v[1]-3,v[1]+3,v[2]-3,v[2]+3
+     res=res or (
+      vx1<=_mx and _mx<=vx2 and
+      vy1<=_my and _my<=vy2)
+    end
    end
    return res
   end,
@@ -223,12 +244,11 @@ function init_toolbar()
     onclick=function()
      export(mdl)
     end
-    
    } 
   },
   update=function(self,mx,my,mb,dw)
    self.sel=0
-   --mouse over
+   --mouse over refactor isinside + div
    for i,act in pairs(self.actions) do
     bx1,bx2,by1,by2=
      i*7-6,i*7,0,7
@@ -252,6 +272,56 @@ function init_toolbar()
  }
 end
 
+function init_context_mnu(mx,my,mnu_items)
+ local max_l,nb_item=0,#mnu_items
+ for item in all(mnu_items) do
+  local l=#(item.caption)
+  if (l>max_l) max_l=l
+ end
+ -- calc coord
+ -- x4*y6
+ local stx,sty=
+  min(128-max_l*4,mx),
+  min(128-nb_item*7,my)
+
+ return {
+  stx=stx,sty=sty,
+  edx=stx+max_l*4,
+  edy=sty+nb_item*7,
+  max_l=max_l,
+  items=mnu_items,
+  sel=0,
+  update=function(self,mx,my,mb,dw)
+   self.sel=0
+   --mouse over
+   if self.stx<mx and mx<self.edx and
+      self.sty<my and my<self.edy then
+    self.sel=(my-self.sty)\7+1
+   end
+   if mb&1==1 then
+    local item=self.items[self.sel]
+    if (item) item.onclick()
+    ctx_mnu=nil
+   end
+  end,
+  draw=function(self)
+   local stx,sty,edx,edy=
+    self.stx,self.sty,
+    self.edx,self.edy
+   rectfill(stx,sty,edx,edy,8)
+   for i,item in pairs(self.items) do
+    local c=6
+    if self.sel==i then
+     c=8
+     rectfill(stx,sty+i*7-7,
+      edx,sty+i*7-1,6)
+    end
+    print(item.caption,stx+1,sty+7*i-6,c)
+   end
+  end
+ }
+end
+
 function _update()
  local mx,my,mb,dw=
   stat(32),stat(33),stat(34),stat(36)
@@ -267,6 +337,8 @@ function _update()
    -- store mx,my start
    c_current:startselect(mx,my)
    updstate=us_select
+  elseif mb&2==2 and not ctx_mnu then
+   ctx_mnu=init_context_mnu(mx,my,add_mnu)
   end
 
  elseif updstate==us_select then
@@ -281,6 +353,7 @@ function _update()
     updstate=us_noselect
    end
   end
+  
  elseif updstate==us_editvrtx then
   if mousemode==mm_point then
    update_focus(mx,my)
@@ -323,6 +396,10 @@ function _update()
    end
   end
  end
+ 
+ if ctx_mnu then
+  ctx_mnu:update(mx,my,mb)
+ end
 end
 
 function update_focus(mx,my)
@@ -350,7 +427,9 @@ function _draw()
  if modal then
   modal:draw()
  end
-
+ if ctx_mnu then
+  ctx_mnu:draw()
+ end
  spr(0,stat(32)-1,stat(33)-1)
 end
 
@@ -572,6 +651,38 @@ end
 function resetkeys()
  while (stat(30)) do
   stat(31)
+ end
+end
+
+--
+function add_cube()
+ cub="{polys={{1,2,3,4,84},{5,6,7,8,84},{1,2,7,8,84},{5,6,3,4,84},{2,3,6,7,84},{1,8,5,4,84}},vrtx={{-4,0,0},{-4,8,0},{4,8,0},{4,0,0},{4,0,8},{4,8,8},{-4,8,8},{-4,0,8}}}"
+ local st_vrtx=#(mdl.vrtx)
+ local _mdl=tbl_parse(cub)
+ add_model(_mdl)
+ ed_vrtx=#(mdl.vrtx)-1
+
+ local selvrtx={}
+ for k=st_vrtx,ed_vrtx do
+  add(selvrtx,k+1)
+ end
+ ivrtx=selvrtx
+ updstate=us_editvrtx
+end
+
+-- add mdl vrtx to world vrtx
+-- update polygone vrtx index
+function add_model(_mdl)
+ local st_vrtx,st_poly=
+  #(mdl.vrtx),#(mdl.polys)
+ for k,v in pairs(_mdl.vrtx) do
+	 mdl.vrtx[k+st_vrtx]=v
+ end
+ for poly in all(_mdl.polys) do
+  for k,p in pairs(poly) do
+	  poly[k]=p+st_vrtx
+  end
+  add(mdl.polys,poly)
  end
 end
 -->8
@@ -837,3 +948,4 @@ __label__
 __sfx__
 000200003c05335053300532c0532905326053220531e0531a0531705313053110530d0530a053070530405300003000030000100001000000000000000000000000000000000000000000000000000000000000
 0014000009450184502c450150500c05007050040500305005050046500765007250077500875009750097500a7500975009750097500b7500f750167501975019750167501a75017750167501b750127500e750
+000200000a170131701a1701e1701f1601e1601d1601a150171500f14005130001300010000100001000010000100001000010000100001000010000100001000010000100001000010000100001000010000100
