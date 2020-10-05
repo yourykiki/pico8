@@ -9,11 +9,10 @@ __lua__
 -- edit face colors
 -- add more volumes
 -- copy each mdl state in stack
--- handle mouse down/up event
 
 local c_top,c_side,c_front,c_3d,
  mdl,mrk_mdl,c_current,ivrtx,
- toolb,modal,ctx_mnu
+ toolb,modal,ctx_mnu,pmb
 local top,sid,fro=
  {1,3},{1,2},{3,2}
 
@@ -215,7 +214,7 @@ function init_modal(msg,fnc,w,h)
    if keypaste() then 
     self.fnc()
     modal=nil
-   elseif mb&2==2 then 
+   elseif m_pressed(mb,2) then 
     modal=nil
    end
   end,
@@ -255,7 +254,7 @@ function init_toolbar()
     if bx1<mx and mx<bx2 and
        by1<my and my<by2 then
      self.sel=i
-     if mb&1==1 then
+     if m_pressed(mb,1) then
       -- clicked
       act.onclick()
      end
@@ -279,7 +278,6 @@ function init_context_mnu(mx,my,mnu_items)
   if (l>max_l) max_l=l
  end
  -- calc coord
- -- x4*y6
  local stx,sty=
   min(128-max_l*4,mx),
   min(128-nb_item*7,my)
@@ -298,7 +296,7 @@ function init_context_mnu(mx,my,mnu_items)
       self.sty<my and my<self.edy then
     self.sel=(my-self.sty)\7+1
    end
-   if mb&1==1 then
+   if m_pressed(mb,1) then
     local item=self.items[self.sel]
     if (item) item.onclick()
     ctx_mnu=nil
@@ -322,22 +320,30 @@ function init_context_mnu(mx,my,mnu_items)
  }
 end
 
+
 function _update()
  local mx,my,mb,dw=
   stat(32),stat(33),stat(34),stat(36)
- 
+ update(mx,my,mb,dw)
+ pmb=mb
+end
+
+function update(mx,my,mb,dw)
+ -- toolbar
  toolb:update(mx,my,mb,dw)
+ -- modal
  if modal then
   modal:update(mx,my,mb)
   return
  end
+ -- 
  if updstate==us_noselect then
   update_focus(mx,my)
   if mb&1==1 then
    -- store mx,my start
    c_current:startselect(mx,my)
    updstate=us_select
-  elseif mb&2==2 and not ctx_mnu then
+  elseif m_pressed(mb,2) and not ctx_mnu then
    ctx_mnu=init_context_mnu(mx,my,add_mnu)
   end
 
@@ -377,7 +383,8 @@ function _update()
   c_current:moveselvrtx(
    bl,br,bu,bd,mdl.vrtx)
     
-  if mb&1==1 and mousemode==mm_point then
+  if m_pressed(mb,1)
+    and mousemode==mm_point then
    if c_current:nearvrtx(mx,my) then
     --dragmove mode on
     mousemode=mm_drag
@@ -652,6 +659,10 @@ function resetkeys()
  while (stat(30)) do
   stat(31)
  end
+end
+
+function m_pressed(mb,n)
+ return mb&n==n and pmb&n==0
 end
 
 --
