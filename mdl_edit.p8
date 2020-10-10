@@ -4,18 +4,19 @@ __lua__
 -- 3d model editor
 -- @yourykiki
 
--- draw near vrtx next
--- draw near vrtx selected
+-- calc face center/normal
 -- allow face select by normal
 -- edit face colors
+-- add/remove face
 -- 3d wireframe,flat shadow
 -- 3d rotation with move tool
 -- add more volumes
 -- copy each mdl state in stack
+-- draw grid matching temple rooms size
 
 local c_top,c_side,c_front,c_3d,
  mdl,mrk_mdl,c_current,ivrtx,
- toolb,modal,ctx_mnu,pmb
+ toolb,modal,ctx_mnu,pmb,inearvrtx
 local top,sid,fro=
  {1,3},{1,2},{3,2}
 
@@ -196,7 +197,7 @@ function init_cam(name,vx,vy,ax)
     vrtx[i][ax[2]]-=dy
    end
   end,
-  nearvrtx=function(self,mx,my)
+  nearselvrtx=function(self,mx,my)
    local res,view=false,self.view
    local _mx,_my=
     mx-view.x,my-view.y
@@ -212,6 +213,20 @@ function init_cam(name,vx,vy,ax)
    end
    return res
   end,
+  near_vrtx=function(self,mx,my)
+   inearvrtx=nil
+   local view=self.view
+   local _mx,_my=
+    mx-view.x,my-view.y
+   for i,v in pairs(self.p_vrtx) do
+    local vx1,vx2,vy1,vy2=
+     v[1]-3,v[1]+3,v[2]-3,v[2]+3
+    if vx1<=_mx and _mx<=vx2 and
+       vy1<=_my and _my<=vy2 then
+     inearvrtx=i
+    end
+   end
+  end
  }
 end
 
@@ -397,6 +412,8 @@ end
 
 function update_move(mx,my,mb,dw)
  -- 
+ if (c_current) c_current:near_vrtx(mx,my)
+ --
  if updstate==us_noselect then
   update_focus(mx,my)
   if mb&1==1 then
@@ -421,6 +438,7 @@ function update_move(mx,my,mb,dw)
   end
   
  elseif updstate==us_editvrtx then
+  local nearsel=c_current:nearselvrtx(mx,my)
   if mousemode==mm_point then
    update_focus(mx,my)
   elseif mousemode==mm_drag then
@@ -435,7 +453,8 @@ function update_move(mx,my,mb,dw)
     return
    end
   end
-  
+
+
   local bl,br,bu,bd=
    btn(⬅️),btn(➡️),
    btn(⬆️),btn(⬇️)
@@ -445,7 +464,7 @@ function update_move(mx,my,mb,dw)
     
   if m_pressed(mb,1)
     and mousemode==mm_point then
-   if c_current:nearvrtx(mx,my) then
+   if nearsel then
     --dragmove mode on
     mousemode=mm_drag
     drag_orig={mx,my}
@@ -469,7 +488,7 @@ function update_face()
 end
 
 function _draw()
- cls''
+ cls()
  draw_cam(c_top)
  draw_cam(c_side)
  draw_cam(c_front)
@@ -514,15 +533,17 @@ function draw_cam(cam)
  end
  -- draw all vertex
  draw_point(vrtx,5)
--- local ivrtx=cam.sel.ivrtx
+
  if ivrtx then
   -- draw selected vrtx
   local selvrtx={}
   for iv in all(ivrtx) do
    add(selvrtx,vrtx[iv])
   end
+  draw_circ(selvrtx,7)
   draw_point(selvrtx,11)
  end
+ draw_circ({vrtx[inearvrtx]},15)
  --
  cam:drawsel()
  print(cam.name,2,2,6)
@@ -543,6 +564,12 @@ end
 function draw_point(vrtx,col)
  for v in all(vrtx) do
   line(v[1],v[2],v[1],v[2],col)
+ end
+end
+
+function draw_circ(vrtx,col)
+ for v in all(vrtx) do
+  circ(v[1],v[2],2,col)
  end
 end
 
