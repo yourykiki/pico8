@@ -4,7 +4,10 @@ __lua__
 -- 3d model editor
 -- @yourykiki
 
--- calc face center/normal
+-- optim normal vector calc
+
+
+-- calc face normal
 -- allow face select by normal
 -- edit face colors
 -- add/remove face
@@ -16,9 +19,10 @@ __lua__
 
 local c_top,c_side,c_front,c_3d,
  mdl,mrk_mdl,c_current,ivrtx,
- toolb,modal,ctx_mnu,pmb,inearvrtx
-local top,sid,fro=
- {1,3},{1,2},{3,2}
+ toolb,modal,ctx_mnu,pmb,
+ inearvrtx,inearnormal
+local top,sid,fro,normals=
+ {1,3},{1,2},{3,2},{}
 
 --0 no selection
 --1 mouse select begin
@@ -68,6 +72,7 @@ function _init()
   init_cam("3d",0, 8)
  -- load default model
  mdl=make_cube({0,0,0},0)
+ update_normals(mdl)
  mrk_mdl=make_marker()
  -- toolbar
  toolb=init_toolbar()
@@ -86,6 +91,7 @@ function init_cam(name,vx,vy,ax)
   ax=ax,
   sel={x1=0,y1=0,x2=0,y2=0,a=false},
   p_vrtx={},
+  p_normals={},
   proj2d=function(self,vrtx)
    local vert,w,h,zm={},
     self.view.w/2,
@@ -170,9 +176,8 @@ function init_cam(name,vx,vy,ax)
   vinsel=function(self,v)
    local sel,vx,vy=self.sel,
     v[1],v[2]   
-   return
-    sel.x1<=vx and vx<=sel.x2 and
-    sel.y1<=vy and vy<=sel.y2
+   return isinside(vx,vy,
+    sel.x1,sel.x2,sel.y1,sel.y2)
   end,
   sortsel=function(self)
    local sel=self.sel
@@ -201,31 +206,31 @@ function init_cam(name,vx,vy,ax)
    local res,view=false,self.view
    local _mx,_my=
     mx-view.x,my-view.y
+  	local mx1,mx2,my1,my2=
+	   _mx-3,_mx+3,_my-3,_my+3
    for i in all(ivrtx) do
     local v=self.p_vrtx[i]
     if v then
-     local vx1,vx2,vy1,vy2=
-      v[1]-3,v[1]+3,v[2]-3,v[2]+3
      res=res or (
-      vx1<=_mx and _mx<=vx2 and
-      vy1<=_my and _my<=vy2)
+      isinside(v[1],v[2],
+	      mx1,mx2,my1,my2))
     end
    end
    return res
   end,
   near_vrtx=function(self,mx,my)
-   inearvrtx=nil
-   local view=self.view
-   local _mx,_my=
-    mx-view.x,my-view.y
-   for i,v in pairs(self.p_vrtx) do
-    local vx1,vx2,vy1,vy2=
-     v[1]-3,v[1]+3,v[2]-3,v[2]+3
-    if vx1<=_mx and _mx<=vx2 and
-       vy1<=_my and _my<=vy2 then
-     inearvrtx=i
-    end
-   end
+   inearvrtx=
+    isin2dvec(
+     self.view,
+     mx,my,
+     self.p_vrtx)
+  end,
+  near_normals=function(self,mx,my)
+   inearnormal=
+    isin2dvec(
+     self.view,
+     mx,my,
+     self.p_normals)
   end
  }
 end
@@ -312,6 +317,7 @@ function init_toolbar()
    end
    local zm=c_current.zoom
    print((zm\1).."%",108,1,15)
+   --print("∧"..stat(1),64,1,15)
   end
  }
 end
@@ -410,6 +416,23 @@ function update_focus(mx,my)
  if (c_3d.focus) c_current=c_3d
 end
 
+function update_normals(mdl)
+ normals={}
+ for i,p in pairs(mdl.polys) do
+  local v,siz={0,0,0},#p-1
+  for j=1,siz do
+   local vj=mdl.vrtx[p[j]]
+   v[1]+=vj[1]
+   v[2]+=vj[2]
+   v[3]+=vj[3]
+  end
+  v[1]/=siz
+  v[2]/=siz
+  v[3]/=siz
+  add(normals,v)
+ end
+end
+
 function update_move(mx,my,mb,dw)
  -- 
  if (c_current) c_current:near_vrtx(mx,my)
@@ -450,6 +473,7 @@ function update_move(mx,my,mb,dw)
    -- 
    if mb&1==0 then
     mousemode=mm_point
+    update_normals(mdl)
     return
    end
   end
@@ -484,7 +508,10 @@ function update_move(mx,my,mb,dw)
  end
 end
 
-function update_face()
+function update_face(mx,my,mb,dw)
+ --
+ if (c_current) c_current:near_normals(mx,my)
+
 end
 
 function _draw()
@@ -516,12 +543,14 @@ function draw_cam(cam)
  -- draw origin marker
  draw_marker(cam,mrk_mdl)
  -- draw model
- local vrtx={}
+ local vrtx,_normals={},{}
  add_all(vrtx,mdl.vrtx)
+ add_all(_normals,normals)
  -- apply 3d camera
  -- fixme handle 3d camera position
  if cam.name=="3d" then 
   transform(vrtx,0,-4,10,0)
+  transform(_normals,0,-4,10,0)
  end
  -- draw model
  --proj
@@ -533,6 +562,13 @@ function draw_cam(cam)
  end
  -- draw all vertex
  draw_point(vrtx,5)
+ -- draw normal
+ if cam.name=="3d" then
+  pnormals=cam:proj(_normals)
+  cam.p_normals=pnormals
+  draw_point(cam.p_normals,8)
+  draw_circ({pnormals[inearnormal]},15)
+ end
 
  if ivrtx then
   -- draw selected vrtx
@@ -718,6 +754,26 @@ function add_all(a,b)
  end
 end
 
+function isin2dvec(view,mx,my,
+ arrayv2d)
+	local _mx,_my=
+	 mx-view.x,my-view.y
+	local mx1,mx2,my1,my2=
+	 _mx-3,_mx+3,_my-3,_my+3
+	for i,v in pairs(arrayv2d) do
+	 if isinside(v[1],v[2],
+	  mx1,mx2,my1,my2) then
+	  return i
+	 end
+	end
+	return nil
+end
+
+function isinside(vx,vy,mx1,mx2,my1,my2)
+ return
+  mx1<=vx and vx<=mx2 and
+  my1<=vy and vy<=my2
+end
 --
 function keypaste()
  local c_v,kp=false
