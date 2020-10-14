@@ -4,12 +4,10 @@ __lua__
 -- 3d model editor
 -- @yourykiki
 
--- edit face colors
--- 3d rotation with move tool
+-- 3d wireframe,flat shadow
 
 -- calc face normal
 -- add/remove face
--- 3d wireframe,flat shadow
 -- add more volumes
 -- copy each mdl state in stack
 -- draw grid matching temple rooms size
@@ -68,6 +66,7 @@ function _init()
   init_cam("s",64,68,sid),
   init_cam("f", 0,68,fro),
   init_cam("3d",0, 8)
+ c_3d.proj=proj3d
  -- load default model
  mdl=make_cube({0,0,0},0)
  update_normals(mdl)
@@ -87,55 +86,21 @@ function init_cam(name,vx,vy,ax)
   ang=0.25,
   view={w=64,h=60,x=vx,y=vy},
   m={},
+  roty=0,
   focus=false,zoom=100,
   ax=ax,
   sel={x1=0,y1=0,x2=0,y2=0,a=false},
   p_vrtx={},
   p_normals={},
-  proj2d=function(self,vrtx)
-   local vert,w,h,zm={},
-    self.view.w/2,
-    self.view.h/2,
-    self.zoom/100
-   for i=1,#vrtx do 
-    local pnt=vrtx[i]
-    vert[i]={
-     pnt[ax[1]]*zm+w,
-     -pnt[ax[2]]*zm+h
-    }
-   end
-   return vert
-  end,
-  upd_m=function(self)
-    local m_vw=
-     make_m_from_v_angle(v_up,self.ang)
-    m_vw[13],m_vw[14],m_vw[15]=
-     self.pos[1],self.pos[2],self.pos[3]
-    m_qinv(m_vw)
-    self.m=m_vw
-  end,
-  proj=function(self,vrtx)
-   if name~="3d" then
-    return self:proj2d(vrtx)
-   end
-   return self:proj3d(vrtx)
-  end,
-  proj3d=function(self,vrtx)
-   local vert,ww,hh,zm=
-    {},self.view.w/2,
-    self.view.h/2,
-    self.zoom/100
-   
-   for i=1,#vrtx do 
-    local v=vrtx[i]
-    local w=ww/v[3]
-    vert[i]={
-     ww+w*v[1]*zm,
-     hh-w*v[2]*zm
-    }
-   end
-   return vert
-  end,
+--  upd_m=function(self)
+--    local m_vw=
+--     make_m_from_v_angle(v_up,self.ang)
+--    m_vw[13],m_vw[14],m_vw[15]=
+--     self.pos[1],self.pos[2],self.pos[3]
+--    m_qinv(m_vw)
+--    self.m=m_vw
+--  end,
+  proj=proj2d,
   setfocus=function(self,mx,my)
    local v=self.view
    self.focus=
@@ -189,6 +154,8 @@ function init_cam(name,vx,vy,ax)
    end
   end,
   moveselvrtx=function(self,bl,br,bu,bd,vrtx)
+   local ax=self.ax
+   if (not ax) return 
    for i in all(ivrtx) do
     if (bl) vrtx[i][ax[1]]-=1
     if (br) vrtx[i][ax[1]]+=1
@@ -450,6 +417,19 @@ function update(mx,my,mb,dw)
   return
  end
  
+ -- 3d specific
+ if c_current and c_current.name=="3d" then
+  if m_pressed(mb,4) then
+   drag_orig={mx,my}
+  elseif mb&4==4 then
+   dx,dy=mx-drag_orig[1],
+         my-drag_orig[2]
+   c_current.roty+=(dx/0.05)
+   drag_orig={mx,my}
+   return
+  end
+ end
+
  ed_tool.update(mx,my,mb,dw)
  
  -- zoom
@@ -460,7 +440,7 @@ function update(mx,my,mb,dw)
   dzm=-10
  end
  c_current.zoom+=dzm
- 
+  
  if ctx_mnu then
   ctx_mnu:update(mx,my,mb)
  end
@@ -490,6 +470,39 @@ function update_normals(mdl)
   add(normals,v)
  end
 end
+
+function proj2d(self,vrtx)
+ local vert,w,h,zm,ax={},
+  self.view.w/2,
+  self.view.h/2,
+  self.zoom/100,
+  self.ax
+ for i=1,#vrtx do 
+  local pnt=vrtx[i]
+  vert[i]={
+   pnt[ax[1]]*zm+w,
+   -pnt[ax[2]]*zm+h
+  }
+ end
+ return vert
+end
+function proj3d(self,vrtx)
+ local vert,ww,hh,zm=
+  {},self.view.w/2,
+  self.view.h/2,
+  self.zoom/100
+ 
+ for i=1,#vrtx do 
+  local v=vrtx[i]
+  local w=ww/v[3]
+  vert[i]={
+   ww+w*v[1]*zm,
+   hh-w*v[2]*zm
+  }
+ end
+ return vert
+end
+
 
 function update_vrtx(mx,my,mb,dw)
  -- 
@@ -571,7 +584,7 @@ function update_face(mx,my,mb,dw)
  if (c_current) c_current:near_normals(mx,my)
 	
 	-- inside colpick 
- if colpick:isinside(mx,my,mb) then
+ if selface and colpick:isinside(mx,my,mb) then
 	 colpick:update(mx,my,mb,dw)
 	 local poly=mdl.polys[selface]
 	 poly[#poly]=colpick.col
@@ -649,8 +662,8 @@ function draw_cam(cam)
  -- apply 3d camera
  -- fixme handle 3d camera position
  if cam.name=="3d" then 
-  transform(vrtx,0,-4,10,0)
-  transform(_normals,0,-4,10,0)
+  transform(vrtx,0,-4,16,cam.roty)
+  transform(_normals,0,-4,16,cam.roty)
  end
  -- draw model
  --proj
@@ -848,10 +861,10 @@ local col1=0x54
  
 function make_cube(pos,ry)
  local lvrtx={
-  {-8,0,0},{-6,8,0},
-  {6,8,0},{8,0,0},
-  {8,0,8},{6,8,8},
-  {-6,8,8},{-8,0,8},
+  {-8,0,-4},{-6,8,-4},
+  {6,8,-4},{8,0,-4},
+  {8,0,4},{6,8,4},
+  {-6,8,4},{-8,0,4},
  }
  local lpolys={
   {1,2,3,4,col1},
