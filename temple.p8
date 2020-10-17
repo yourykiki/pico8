@@ -339,14 +339,13 @@ end
 function _draw()
  cls""
  -- model transformation
- --ftheta += 1.0f * felapsedtime; // uncomment to spin me right round baby right round
- local m_rotz,m_roty,m_tran=
-  m_makerotz(1),
+-- local m_rotz=m_makerotz(1)
+ local m_roty,m_tran=
   m_makeroty(0),--t*0.25
   m_maketran(0,0,0)
 
  m_wrld={1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1}
- m_wrld=m_x_m(m_rotz,m_roty)
+ m_wrld=m_x_m(m_wrld,m_roty)
  m_wrld=m_x_m(m_wrld,m_tran)
 	
 	-- camera
@@ -382,26 +381,24 @@ function _draw()
   
   if v_dot(norm,vp)<0 then
    -- clipping
-   local polyidx={
-    poly[1],
-    poly[2],
-    poly[3],
-    poly[4],
-    poly[5],--col
-    i}--idx normal
+   local polyidx={}
+   for i=1,#poly-1 do
+    polyidx[i]=poly[i]
+   end
 
    local tc=t_clip({0,0,1},
     {0,0,1},v_view,polyidx)
---   for tc in all(tclips) do
-    -- add clipped polygon
+   -- add clipped polygon
    if tc then
-    local z,nbv=0,#tc-2
-    for itc=1,nbv do
-     z=max(z,v_view[tc[itc]][3])
+    local z=0
+    for iv in all(tc) do
+     z=max(z,v_view[iv][3])
     end
     add(vispolys,{
-     key=z,
-     poly=tc
+     poly=tc,
+     col=poly[#poly],
+	    idx=i,
+     key=z
     })
    end
   end 
@@ -422,36 +419,23 @@ function _draw()
 
  -- drawing visible poly
  for j=#vispolys,1,-1 do
-  local ipoly=vispolys[j].poly
-  local v,c,idx={},
-   ipoly[#ipoly-1],
-	  ipoly[#ipoly]
-	 
-		for i=1,#ipoly-2 do
-		 v[i]=proj[ipoly[i]]
-  end
+  local objpoly=vispolys[j]
+  local poly,idx,col=
+ 	 objpoly.poly,
+ 	 objpoly.idx,
+ 	 objpoly.col
+ 	local _poly={}
+	 for i=1,#poly do
+	  add(_poly,proj[poly[i]])
+	 end
   --color and dither
-  --color(c)
   local ptn=v_dot(_norms[idx],lgt)
   ptn=(ptn*8+8)\1
   fillp(dith2[ptn\1])
   --filling
-  polyfill(v,c)
+  polyfill(_poly,col)
 
---fillp()
-
-  -- wireframe
   fillp()
-  if wf then
-   line(v1[1],v1[2],v2[1],v2[2],6)
-   line(v3[1],v3[2])
-   line(v1[1],v1[2])  
-   -- normals
-   local n1=pcntr[idx]
-   local n2=pnorm[idx]
-   line(n1[1],n1[2],n2[1],n2[2],8)
-  end
-  
  end
  
  cpu["9-filltris"]=curcpu()
@@ -643,20 +627,19 @@ end
 function t_clip(
  v_pln,v_nrm,v_view,polyidx)
     
- local poly,v_in,v_out={
- v_view[polyidx[1]],
- v_view[polyidx[2]],
- v_view[polyidx[3]],
- v_view[polyidx[4]]
- },
- {},{}
+ local poly,v_in,v_out,n=
+  {},{},{},#polyidx
+  
+ for k,pidx in pairs(polyidx) do
+   poly[k]=v_view[pidx]
+ end
 
  local pdot,res,d,last=
   v_dot(v_nrm,v_pln),{}
  
- for i=1,5 do
+ for i=1,n+1 do
   local j,prevj=
-   (i-1)%4+1,(i-2)%4+1
+   (i-1)%n+1,(i-2)%n+1
   d=v_dot(v_nrm,poly[j])-pdot
   if last==nil then
    last=d>0 and "in" or "out"
@@ -687,10 +670,8 @@ function t_clip(
    last="out"
   end
  end
- add(res,polyidx[5])
- add(res,polyidx[6])
 
- if (#res>=5) return res
+ if (#res>=3) return res
  return nil
 end
 

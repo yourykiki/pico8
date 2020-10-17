@@ -4,9 +4,10 @@ __lua__
 -- 3d model editor
 -- @yourykiki
 
--- 3d wireframe,flat shadow
+-- "clip" vertex behind cam
+-- c_3d on a sphere look at 0,0,0
 
--- calc face normal
+-- resize view(port) cam
 -- add/remove face
 -- add more volumes
 -- copy each mdl state in stack
@@ -16,8 +17,9 @@ local c_top,c_side,c_front,c_3d,
  mdl,mrk_mdl,c_current,ivrtx,
  toolb,modal,ctx_mnu,pmb,colpick,
  inearvrtx,inearnormal,selface
-local top,sid,fro,normals=
- {1,3},{1,2},{3,2},{}
+local top,sid,fro,normals,normcnt=
+ {1,3},{1,2},{3,2},{},{}
+local v_up={0,1,0}
 
 --0 no selection
 --1 mouse select begin
@@ -38,6 +40,22 @@ local mousemode,
 local ed_vrtx,ed_face=
  "vrtx","face"
 local ed_tool={name=ed_vrtx}
+
+local render,
+ r_wire,
+ r_flat=0,0,1
+local dith={
+ 0x0000,0x8000,0x8020,0xa020,
+ 0xa0a0,0xa4a0,0xa4a1,0xa5a1,
+ 0xa5a5,0xe5a5,0xa5b5,0xf5b5,
+ 0xf5f5,0xfdf5,0xfdf7,0xffff
+}
+local dith2={
+ 0x0000,0x0000,0x8020,0xc020,
+ 0xc060,0xc070,0xe070,0xe470,
+ 0xe472,0xf472,0xf4f2,0xf5f2,
+ 0xf5fa,0xf7fa,0xf7fe,0xffff
+}
 
 local add_mnu={
  { caption="add cube",
@@ -82,24 +100,24 @@ end
 function init_cam(name,vx,vy,ax)
  return {
   name=name,
-  pos={0,6,-10},
+  pos={0,4,-16},
+  roty=0,
   ang=0.25,
   view={w=64,h=60,x=vx,y=vy},
   m={},
-  roty=0,
   focus=false,zoom=100,
   ax=ax,
   sel={x1=0,y1=0,x2=0,y2=0,a=false},
   p_vrtx={},
-  p_normals={},
---  upd_m=function(self)
---    local m_vw=
---     make_m_from_v_angle(v_up,self.ang)
---    m_vw[13],m_vw[14],m_vw[15]=
---     self.pos[1],self.pos[2],self.pos[3]
---    m_qinv(m_vw)
---    self.m=m_vw
---  end,
+  p_normcnt={},
+  upd_m=function(self)
+   local m_vw=
+    make_m_from_v_angle(v_up,self.ang)
+   m_vw[13],m_vw[14],m_vw[15]=
+    self.pos[1],self.pos[2],self.pos[3]
+   m_qinv(m_vw)
+   self.m=m_vw
+  end,
   proj=proj2d,
   setfocus=function(self,mx,my)
    local v=self.view
@@ -197,7 +215,7 @@ function init_cam(name,vx,vy,ax)
     isin2dvec(
      self.view,
      mx,my,
-     self.p_normals)
+     self.p_normcnt)
   end
  }
 end
@@ -240,6 +258,7 @@ function init_toolbar()
      export(mdl)
     end
    },
+   {icon=5,onclick=noop},
    {icon=3,
     onclick=function()
      ed_tool.name=ed_vrtx
@@ -257,7 +276,24 @@ function init_toolbar()
     tgl=function()
      return ed_tool.name==ed_face
     end
-   } 
+   },
+   {icon=5,onclick=noop},
+   {icon=6,
+    onclick=function()
+     render=r_wire
+    end,
+    tgl=function()
+     return render==r_wire
+    end
+   },
+   {icon=7,
+    onclick=function()
+     render=r_flat
+    end,
+    tgl=function()
+     return render==r_flat
+    end
+   }
   },
   update=function(self,mx,my,mb,dw)
    self.sel=0
@@ -425,6 +461,7 @@ function update(mx,my,mb,dw)
    dx,dy=mx-drag_orig[1],
          my-drag_orig[2]
    c_current.roty+=(dx/0.05)
+   c_current.pos[2]+=dy/4
    drag_orig={mx,my}
    return
   end
@@ -433,14 +470,16 @@ function update(mx,my,mb,dw)
  ed_tool.update(mx,my,mb,dw)
  
  -- zoom
- local dzm=0
- if dw>0 then
-  dzm=10
- elseif dw<0 then
-  dzm=-10
+ if c_current then
+  local dzm=0
+  if dw>0 then
+   dzm=10
+  elseif dw<0 then
+   dzm=-10
+  end
+  c_current.zoom+=dzm
  end
- c_current.zoom+=dzm
-  
+   
  if ctx_mnu then
   ctx_mnu:update(mx,my,mb)
  end
@@ -459,7 +498,8 @@ function update_focus(mx,my)
 end
 
 function update_normals(mdl)
- normals={}
+ normcnt={}
+ --center
  for i,p in pairs(mdl.polys) do
   local v,siz={0,0,0},#p-1
   for j=1,siz do
@@ -467,8 +507,10 @@ function update_normals(mdl)
    v_add(v,vj)
   end
   v_scale(v,1/siz)
-  add(normals,v)
+  add(normcnt,v)
  end
+ --normals
+ normals=init_norm(mdl.vrtx,mdl.polys)
 end
 
 function proj2d(self,vrtx)
@@ -650,70 +692,190 @@ function draw_cam(cam)
  camera(-vport.x,-vport.y)
  clip(vport.x,vport.y,vport.w,vport.h)
  rectfill(0,0,vport.w-1,vport.h-1,1)
- if (cam.focus) then
-  rect(0,0,vport.w-1,vport.h-1,7)
- end
+
  -- draw origin marker
  draw_marker(cam,mrk_mdl)
  -- draw model
- local vrtx,_normals={},{}
+ local vrtx,_normcnt={},{}
  add_all(vrtx,mdl.vrtx)
- add_all(_normals,normals)
- -- apply 3d camera
- -- fixme handle 3d camera position
- if cam.name=="3d" then 
-  transform(vrtx,0,-4,16,cam.roty)
-  transform(_normals,0,-4,16,cam.roty)
- end
+ add_all(_normcnt,normcnt)
+
+ local iscam3d=cam.name=="3d"
  -- draw model
- --proj
- vrtx=cam:proj(vrtx)
- cam.p_vrtx=vrtx
- --draw
- for poly in all(mdl.polys) do
-  draw_wire(vrtx,poly)
- end
- -- draw all vertex
- draw_point(vrtx,5)
- -- draw normal
- if cam.name=="3d" then
-  pnormals=cam:proj(_normals)
-  cam.p_normals=pnormals
-  draw_point(cam.p_normals,8)
+ if iscam3d then
+  -- world transform
+  local m_roty,m_tran=
+   m_makeroty(cam.roty),
+   m_maketran(0,0,0)
+		
+  m_wrld={1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1}
+  m_wrld=m_x_m(m_wrld,m_roty)
+  m_wrld=m_x_m(m_wrld,m_tran)
+  -- cam transform
+  cam:upd_m()
+  local v_view,v_wrld,v_vwcnt=
+   {},{},{}
+	
+  for v in all(vrtx) do--optim vrtx
+   local tmp=m_x_v(m_wrld,v)
+   add(v_wrld,tmp)
+   add(v_view,m_x_v(cam.m,tmp))
+  end
+
+  -- normal center  
+  normals=init_norm(v_wrld,mdl.polys)
+  --
+  for v in all(_normcnt) do
+   local tmp=m_x_v(m_wrld,v)
+   add(v_vwcnt,m_x_v(cam.m,tmp))
+  end
+
+  _normcnt=cam:proj(v_vwcnt)
+	
+  local	vispolys=
+   cullnclip(v_wrld,v_view)
+   
+	 --proj, including vrtx from clip
+  vrtx=c_3d:proj(v_view)
+  c_3d.p_vrtx=vrtx
+  -- and finally 
+  draw_polys(vispolys,vrtx)
+  
+  -- draw normals
+  pnormals=_normcnt
+  cam.p_normcnt=pnormals
+  draw_points(pnormals,8)
   draw_circ({pnormals[inearnormal]},15)
   if selface then
    draw_circ({pnormals[selface]},7)
   end
- end
+  --  
+  draw_selected_vrtx(vrtx,v_view)
 
- if ivrtx then
-  -- draw selected vrtx
-  local selvrtx={}
-  for iv in all(ivrtx) do
-   add(selvrtx,vrtx[iv])
-  end
-  draw_circ(selvrtx,7)
-  draw_point(selvrtx,11)
+ else 
+  -- 2d wire rendering
+  vrtx=cam:proj(vrtx)
+  cam.p_vrtx=vrtx
+	 for poly in all(mdl.polys) do
+	  -- convert poly with vrtx idx
+	  -- to poly with vrtx coord
+	  local _poly={}
+	  for i=1,#poly-1 do
+	   _poly[i]=vrtx[poly[i]]
+	  end
+	  draw_wire(_poly)
+	 end
+  draw_selected_vrtx(vrtx)
  end
- draw_circ({vrtx[inearvrtx]},15)
+ -- draw all vertex todo clip3d
+ draw_points(vrtx,5)
  --
  cam:drawsel()
+ if (cam.focus) then
+  rect(0,0,vport.w-1,vport.h-1,7)
+ end
  print(cam.name,2,2,6)
  clip()
 end
 
-function draw_wire(vrtx,poly)
-
- local nb=#poly-1
- local v1,v2=vrtx[poly[nb]]
-
- for i=1,nb do
-  v2,v1=v1,vrtx[poly[i]]
+function draw_selected_vrtx(vrtx,v_view)
+ if ivrtx then
+  -- draw selected vrtx
+  local selvrtx={}
+  for iv in all(ivrtx) do
+   -- todo isvrtxvisible()
+   if not v_view 
+    or v_view[iv][3]>0 then
+    add(selvrtx,vrtx[iv])
+   end
+  end
+  draw_circ(selvrtx,7)
+  draw_points(selvrtx,11)
+ end
+ -- todo isvrtxvisible()
+ if not v_view 
+    or (inearvrtx and v_view[inearvrtx][3]>0) then
+  draw_circ({vrtx[inearvrtx]},15)
+ end
+end
+--_poly=polygon with vertx coord
+function draw_wire(_poly)
+ local v1,v2=_poly[#_poly]
+ for v in all(_poly) do
+  v2,v1=v1,v
   line(v1[1],v1[2],v2[1],v2[2],6)
  end
 end
 
-function draw_point(vrtx,col)
+function cullnclip(v_wrld,v_view)
+ local vispolys={}
+ -- check visibility
+ for k,poly in pairs(mdl.polys) do
+  local norm=normals[k]
+  local vp=v_clone(v_wrld[poly[1]])
+  v_add(vp,c_3d.pos,-1)
+
+  -- backface culling
+  if v_dot(norm,vp)<0
+   or render==r_wire then
+   -- clipping
+   local polyidx={}
+   for i=1,#poly-1 do
+    polyidx[i]=poly[i]
+   end
+
+   local tc=t_clip({0,0,1},
+    {0,0,1},v_view,polyidx)
+   -- final polygon to render
+   if tc then
+	   local z=0
+	   for iv in all(tc) do
+	    z=max(z,v_view[iv][3])
+	   end
+	   add(vispolys,{
+	    poly=tc,
+	    col=poly[#poly],
+	    idx=k,
+	    key=z
+	   })
+	  end
+  end
+ end
+ return vispolys
+end
+
+function draw_polys(vispolys,vrtx)
+
+ -- sorting visible poly
+ shellsort(vispolys)
+
+ --light
+ local lgt={1,-1,0} 
+ v_normz(lgt)
+ 
+ for objpoly in all(vispolys) do
+ 	local poly,idx,col=
+ 	 objpoly.poly,
+ 	 objpoly.idx,
+ 	 objpoly.col
+ 	local _poly={}
+	 for i=1,#poly do
+	  add(_poly,vrtx[poly[i]])
+	 end
+  --color and dither
+	 if render==r_flat then
+   local ptn=v_dot(normals[idx],lgt)
+   ptn=(ptn*8+8)\1
+   fillp(dith2[ptn\1])
+   polyfill(_poly,col)
+	 else
+   draw_wire(_poly)
+	 end
+ end
+ fillp()
+end
+
+function draw_points(vrtx,col)
  for v in all(vrtx) do
   line(v[1],v[2],v[1],v[2],col)
  end
@@ -855,6 +1017,83 @@ end
 function v_dot(a,b)
  return a[1]*b[1]+a[2]*b[2]+a[3]*b[3]
 end
+function m_qinv(m)
+ m[2],m[5]=m[5],m[2]
+ m[3],m[9]=m[9],m[3]
+ m[7],m[10]=m[10],m[7]
+ local px,py,pz=
+  m[13],m[14],m[15]
+ m[13],m[14],m[15]=
+  -(px*m[1]+py*m[5]+pz*m[9]),
+  -(px*m[2]+py*m[6]+pz*m[10]),
+  -(px*m[3]+py*m[7]+pz*m[11])
+end
+function make_m_from_v_angle(up,ang)
+ local fwd={cos(ang),0,-sin(ang)}
+ local right=v_cross(up,fwd)
+ v_normz(right)
+ fwd=v_cross(right,up)
+ return {
+  right[1],right[2],right[3],0,
+  up[1],up[2],up[3],0,
+  fwd[1],fwd[2],fwd[3],0,
+  0,0,0,1
+ }
+end
+
+-- polyfill from virtua racing
+function polyfill(p,col)
+	color(col)
+	local p0,nodes=p[#p],{}
+	local x0,y0=p0[1],p0[2]
+
+	for i=1,#p do
+		local p1=p[i]
+		local x1,y1=p1[1],p1[2]
+		-- backup before any swap
+		local _x1,_y1=x1,y1
+		if(y0>y1) x1=x0 y1=y0 x0=_x1 y0=_y1
+		-- exact slope
+		local dx=(x1-x0)/(y1-y0)
+		if(y0<0) x0-=y0*dx y0=-1
+		-- subpixel shifting (after clipping)
+		local cy0=(y0&0xffff)+1
+--		local cy0=y0\1+1
+		x0+=(cy0-y0)*dx
+		for y=cy0,min(y1\1,127) do
+			local x=nodes[y]
+			if x then
+				rectfill(x,y,x0,y)
+			else
+				nodes[y]=x0
+			end
+			x0+=dx
+		end
+		-- next vertex
+		x0=_x1
+		y0=_y1
+	end
+end
+
+-- triplefox with ciura's sequence
+-- https://www.lexaloffle.com/bbs/?tid=2477
+local shell_gaps={701,301,132,57,23,10,4,1} 
+function shellsort(a)
+ for gap in all(shell_gaps) do
+  if gap<=#a then
+   for i=gap,#a do
+    local t=a[i]
+    local j=i
+    while j>gap and
+       a[j-gap].key>t.key do 
+     a[j]=a[j-gap]
+     j-=gap
+    end
+    a[j]=t
+   end
+  end
+ end
+end
 -->8
 --3d models
 local col1=0x54
@@ -869,10 +1108,10 @@ function make_cube(pos,ry)
  local lpolys={
   {1,2,3,4,col1},
   {5,6,7,8,col1},
-  {1,2,7,8,col1},
-  {5,6,3,4,col1},
-  {2,3,6,7,col1},
-  {1,8,5,4,col1},
+  {8,7,2,1,col1},
+  {4,3,6,5,col1},
+  {7,6,3,2,col1},
+  {4,5,8,1,col1},
  }
 
  transform(lvrtx,
@@ -899,8 +1138,27 @@ function make_marker()
  }
 end
 
+function init_norm(_vrtx,_poly)
+ local norms={}
+ for poly in all(_poly) do
+  local v1,v2,v3=
+   v_clone(_vrtx[poly[1]]),
+   v_clone(_vrtx[poly[2]]),
+   v_clone(_vrtx[poly[3]])
+  
+  -- normal
+  v_add(v2,v1,-1)
+  v_add(v3,v1,-1)
+  local n=v_cross(v2,v3)
+  v_normz(n)
+  add(norms,n)
+ end
+ return norms
+end
 -->8
 -- utils @yourykiki
+function noop()
+end
 function add_all(a,b)
  for x in all(b) do
   add(a,x)
@@ -978,8 +1236,79 @@ function add_model(_mdl)
   add(mdl.polys,poly)
  end
 end
+
+local clipin,clipout=0,1
+function t_clip(
+ v_pln,v_nrm,v_view,polyidx)
+ local max_vrtx,nb_clip=
+  #v_view,0
+ local poly,v_in,v_out,n=
+  {},{},{},#polyidx
+  
+ for k,pidx in pairs(polyidx) do
+   poly[k]=v_view[pidx]
+ end
+ local pdot,res,d,last=
+  v_dot(v_nrm,v_pln),{}
+ 
+ for i=1,n+1 do
+  local j,prevj=
+   (i-1)%n+1,(i-2)%n+1
+  d=v_dot(v_nrm,poly[j])-pdot
+  if last==nil then
+   last=d>0 and "in" or "out"
+  elseif d>0 then 
+   if last=="out" then
+    --calc intersect
+    local v1=
+     v_intsec(v_pln,v_nrm,poly[prevj],poly[j])
+    --add res
+    local idx=max_vrtx+nb_clip+1
+    v_view[idx]=v1
+    nb_clip+=1
+    add(res,idx)
+   end
+   add(res,polyidx[j])
+   last="in"
+  else
+   if last=="in" then
+    --calc intersect
+    local v1=
+     v_intsec(v_pln,v_nrm,poly[prevj],poly[j])
+    --add res
+    local idx=max_vrtx+nb_clip+1
+    v_view[idx]=v1
+    nb_clip+=1
+    add(res,idx)
+   end
+   last="out"
+  end
+ end
+
+ if (#res>=3) return res
+ return nil
+end
+
+function v_intsec(
+  v_pln,v_nrm,v_start,v_end)
+
+--	v_nrm=vector_normalise(v_nrm)
+	local plane_d,ad,bd=
+	 -v_dot(v_nrm,v_pln),
+	 v_dot(v_start,v_nrm),
+	 v_dot(v_end,v_nrm)
+	local t=(-plane_d-ad)/(bd-ad)
+	local v_s_to_end=v_clone(v_end)
+	v_add(v_s_to_end,v_start,-1)
+	
+	v_scale(v_s_to_end,t)
+	 
+ local res=v_clone(v_start)
+ v_add(res,v_s_to_end)
+	return res
+end
 -->8
--- export 
+-- export / import
 
 function export(mdl)
  -- format string
@@ -1094,28 +1423,28 @@ end
 
 __gfx__
 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-1100000000060000000600000d00000005dddd500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-16100000000600000066600000d00dd00dd0d0d00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-1661000006666600066666000005d0000d0d0dd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-166610000066600000060000000d00000dd0d0d00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-166661000006000000060000000d00000d0d0dd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-116610000222220002222200000d000005dddd500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+110000000006000000060000000d000005dddd50000000000000dd500000dd500000000000000000000000000000000000000000000000000000000000000000
+161000000006000000666000000000000dd0d0d00000000005dd00d005ddddd00000000000000000000000000000000000000000000000000000000000000000
+1661000006666600066666000d050d000d0d0dd0000000000d0000d00dddddd00000000000000000000000000000000000000000000000000000000000000000
+166610000066600000060000000000000dd0d0d0000000000d0000d00dddddd00000000000000000000000000000000000000000000000000000000000000000
+166661000006000000060000000d00000d0d0dd0000000000d00dd500ddddd500000000000000000000000000000000000000000000000000000000000000000
+1166100002222200022222000000000005dddd500000000005dd000005dd00000000000000000000000000000000000000000000000000000000000000000000
 00110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0006600000000000000000000000000005dddd500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0060060000060000000600000d0000000d0d0dd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00600600000600000066600000d00dd00dd0d0d00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0006600006666600066666000005d0000d0d0dd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-000006000066600000060000000d00000dd0d0d00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-000000600222220002222200000d000005dddd500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0006600000000000000000000000000005dddd500000000005dd000005dd00000000000000000000000000000000000000000000000000000000000000000000
+006006000006000000060000000d00000d0d0dd0000000000d00dd500ddddd500000000000000000000000000000000000000000000000000000000000000000
+006006000006000000666000000000000dd0d0d0000000000d0000d00dddddd00000000000000000000000000000000000000000000000000000000000000000
+0006600006666600066666000d050d000d0d0dd0000000000d0000d00dddddd00000000000000000000000000000000000000000000000000000000000000000
+000006000066600000060000000000000dd0d0d00000000005dd00d005ddddd00000000000000000000000000000000000000000000000000000000000000000
+000000600222220002222200000d000005dddd50000000000000dd500000dd500000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0000000000000000000000000f00000005ffff500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000f00ff00ff0f0f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0000000000000000000000000005f0000f0f0ff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-000000000000000000000000000f00000ff0f0f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-000000000000000000000000000f00000f0f0ff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-000000000000000000000000000f000005ffff500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000f000005ffff50000000000000ff500000ff500000000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000ff0f0f00000000005ff00f005fffff00000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000f050f000f0f0ff0000000000f0000f00ffffff00000000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000ff0f0f0000000000f0000f00ffffff00000000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000f00000f0f0ff0000000000f00ff500fffff500000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000005ffff500000000005ff000005ff00000000000000000000000000000000000000000000000000000000000000000000
 __label__
 11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
 10000000000000000000000000000000000000000000000000000000000000011000000000000000000000000000000000000000000000000000000000000001
