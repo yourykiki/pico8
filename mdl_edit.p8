@@ -4,7 +4,6 @@ __lua__
 -- 3d model editor
 -- @yourykiki
 
--- "clip" vertex behind cam
 -- c_3d on a sphere look at 0,0,0
 
 -- resize view(port) cam
@@ -735,10 +734,10 @@ function draw_cam(cam)
   local	vispolys=
    cullnclip(v_wrld,v_view)
    
-	 --proj, including vrtx from clip
+  --proj, including vrtx from clip
   vrtx=c_3d:proj(v_view)
   c_3d.p_vrtx=vrtx
-  -- and finally 
+  -- and finally
   draw_polys(vispolys,vrtx)
   
   -- draw normals
@@ -751,6 +750,7 @@ function draw_cam(cam)
   end
   --  
   draw_selected_vrtx(vrtx,v_view)
+  draw_visible_vrtx(vrtx,v_view)
 
  else 
   -- 2d wire rendering
@@ -766,9 +766,9 @@ function draw_cam(cam)
 	  draw_wire(_poly)
 	 end
   draw_selected_vrtx(vrtx)
+  -- draw all vertex
+  draw_points(vrtx,5)
  end
- -- draw all vertex todo clip3d
- draw_points(vrtx,5)
  --
  cam:drawsel()
  if (cam.focus) then
@@ -783,20 +783,33 @@ function draw_selected_vrtx(vrtx,v_view)
   -- draw selected vrtx
   local selvrtx={}
   for iv in all(ivrtx) do
-   -- todo isvrtxvisible()
-   if not v_view 
-    or v_view[iv][3]>0 then
+   if isvrtxvisible(v_view,iv) then
     add(selvrtx,vrtx[iv])
    end
   end
   draw_circ(selvrtx,7)
   draw_points(selvrtx,11)
  end
- -- todo isvrtxvisible()
- if not v_view 
-    or (inearvrtx and v_view[inearvrtx][3]>0) then
+ if inearvrtx and 
+  isvrtxvisible(
+   v_view,inearvrtx) then
   draw_circ({vrtx[inearvrtx]},15)
  end
+end
+
+function draw_visible_vrtx(vrtx,v_view)
+ -- draw all vertex
+ local visvrtx={}
+ for k,v in pairs(vrtx) do
+  if isvrtxvisible(v_view,k) then
+   add(visvrtx,v)
+  end
+ end
+ draw_points(visvrtx,5)
+end
+function isvrtxvisible(v_view,iv)
+ return not v_view
+  or v_view[iv][3]>0
 end
 --_poly=polygon with vertx coord
 function draw_wire(_poly)
