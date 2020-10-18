@@ -4,13 +4,13 @@ __lua__
 -- 3d model editor
 -- @yourykiki
 
--- c_3d on a sphere look at 0,0,0
-
 -- resize view(port) cam
 -- add/remove face
 -- add more volumes
 -- copy each mdl state in stack
 -- draw grid matching temple rooms size
+
+-- c_3d on a sphere look at 0,0,0
 
 local c_top,c_side,c_front,c_3d,
  mdl,mrk_mdl,c_current,ivrtx,
@@ -18,7 +18,7 @@ local c_top,c_side,c_front,c_3d,
  inearvrtx,inearnormal,selface
 local top,sid,fro,normals,normcnt=
  {1,3},{1,2},{3,2},{},{}
-local v_up={0,1,0}
+local v_up,camdst={0,1,0},16
 
 --0 no selection
 --1 mouse select begin
@@ -99,7 +99,7 @@ end
 function init_cam(name,vx,vy,ax)
  return {
   name=name,
-  pos={0,4,-16},
+  pos={0,4,-camdst},
   roty=0,
   ang=0.25,
   view={w=64,h=60,x=vx,y=vy},
@@ -110,6 +110,9 @@ function init_cam(name,vx,vy,ax)
   p_vrtx={},
   p_normcnt={},
   upd_m=function(self)
+   c_current.pos[1]=-camdst*cos(c_current.ang)
+   c_current.pos[3]= camdst*sin(c_current.ang)
+
    local m_vw=
     make_m_from_v_angle(v_up,self.ang)
    m_vw[13],m_vw[14],m_vw[15]=
@@ -459,7 +462,9 @@ function update(mx,my,mb,dw)
   elseif mb&4==4 then
    dx,dy=mx-drag_orig[1],
          my-drag_orig[2]
-   c_current.roty+=(dx/0.05)
+   -- make the cam move based
+   -- on ang instead of models
+   c_current.ang+=(dx/0.05)
    c_current.pos[2]+=dy/4
    drag_orig={mx,my}
    return
@@ -477,6 +482,7 @@ function update(mx,my,mb,dw)
    dzm=-10
   end
   c_current.zoom+=dzm
+  camdst=camdst-dzm/10
  end
    
  if ctx_mnu then
@@ -531,7 +537,7 @@ function proj3d(self,vrtx)
  local vert,ww,hh,zm=
   {},self.view.w/2,
   self.view.h/2,
-  self.zoom/100
+  1--use camdst instead
  
  for i=1,#vrtx do 
   local v=vrtx[i]
