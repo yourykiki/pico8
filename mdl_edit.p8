@@ -872,7 +872,9 @@ function draw_polys(vispolys,vrtx)
  local lgt={1,-1,0} 
  v_normz(lgt)
  
- for objpoly in all(vispolys) do
+-- for objpoly in all(vispolys) do
+ for j=#vispolys,1,-1 do
+  local objpoly=vispolys[j]
  	local poly,idx,col=
  	 objpoly.poly,
  	 objpoly.idx,
@@ -1226,7 +1228,13 @@ end
 
 --
 function add_cube()
- cub="{polys={{1,2,3,4,84},{5,6,7,8,84},{1,2,7,8,84},{5,6,3,4,84},{2,3,6,7,84},{1,8,5,4,84}},vrtx={{-4,0,0},{-4,8,0},{4,8,0},{4,0,0},{4,0,8},{4,8,8},{-4,8,8},{-4,0,8}}}"
+ cub="{polys={{1,2,3,4,14},"
+  .."{5,6,7,8,84},{8,7,2,1,84},"
+  .."{4,3,6,5,84},{7,6,3,2,84},"
+  .."{4,5,8,1,84}},"
+  .."vrtx={{-4,0,-4},{-4,8,-4},"
+  .."{4,8,-4},{4,0,-4},{4,0,4},"
+  .."{4,8,4},{-4,8,4},{-4,0,4}}}"
  local st_vrtx=#(mdl.vrtx)
  local _mdl=tbl_parse(cub)
  add_model(_mdl)
@@ -1256,7 +1264,7 @@ function add_model(_mdl)
  end
 end
 
-local clipin,clipout=0,1
+-- test local clipin,clipout=0,1
 function t_clip(
  v_pln,v_nrm,v_view,polyidx)
  local max_vrtx,nb_clip=
