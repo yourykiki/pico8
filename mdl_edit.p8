@@ -112,8 +112,8 @@ function init_cam(name,vx,vy,ax)
   p_normcnt={},
   upd_m=function(self)
    local d=self.camdst
-   c_current.pos[1]=-d*cos(c_current.ang)
-   c_current.pos[3]= d*sin(c_current.ang)
+   self.pos[1]=-d*cos(self.ang)
+   self.pos[3]= d*sin(self.ang)
 
    local m_vw=
     make_m_from_v_angle(v_up,self.ang)
@@ -137,6 +137,14 @@ function init_cam(name,vx,vy,ax)
      sel.x2,sel.y2,0x57)
     fillp()
    end
+  end,
+  draworig=function(self)
+   local pos,w,h=
+    self.pos,self.view.w,self.view.h
+   local x,y=
+    mid(1,w/2+pos[1],w-2),
+    mid(1,h/2+pos[2],h-2)
+   line(x,y,x,y,7)
   end,
   startselect=function(self,mx,my)
    local sel,view=self.sel,self.view
@@ -267,6 +275,7 @@ function init_toolbar()
     onclick=function()
      ed_tool.name=ed_vrtx
      ed_tool.update=update_vrtx
+     reset_tool()
     end,
     tgl=function()
      return ed_tool.name==ed_vrtx
@@ -276,6 +285,7 @@ function init_toolbar()
     onclick=function()
      ed_tool.name=ed_face
      ed_tool.update=update_face
+     reset_tool()
     end,
     tgl=function()
      return ed_tool.name==ed_face
@@ -469,17 +479,19 @@ function update(mx,my,mb,dw)
   return
  end
  
- -- 3d specific
- if c_current and c_current.name=="3d" then
+ -- move cam
+ if c_current then
   if m_pressed(mb,4) then
    drag_orig={mx,my}
   elseif mb&4==4 then
-   dx,dy=mx-drag_orig[1],
-         my-drag_orig[2]
-   -- make the cam move based
-   -- on ang instead of models
-   c_current.ang+=(dx/0.05)
-   c_current.pos[2]+=dy/4
+   local dx,dy=
+    mx-drag_orig[1],
+    my-drag_orig[2]
+   if c_current.name=="3d" then
+    move_3dcam(mx,my,mb,dx,dy)
+   else
+    move_2dcam(mx,my,mb,dx,dy)
+   end
    drag_orig={mx,my}
    return
   end
@@ -533,16 +545,17 @@ function update_normals(mdl)
 end
 
 function proj2d(self,vrtx)
- local vert,w,h,zm,ax={},
+ local vert,w,h,zm,ax,pos={},
   self.view.w/2,
   self.view.h/2,
   self.zoom/100,
-  self.ax
+  self.ax,
+  self.pos
  for i=1,#vrtx do 
   local pnt=vrtx[i]
   vert[i]={
-   pnt[ax[1]]*zm+w,
-   -pnt[ax[2]]*zm+h
+   pos[1]+pnt[ax[1]]*zm+w,
+   pos[2]-pnt[ax[2]]*zm+h
   }
  end
  return vert
@@ -789,6 +802,7 @@ function draw_cam(cam)
   draw_selected_vrtx(vrtx)
   -- draw all vertex
   draw_points(vrtx,5)
+  cam:draworig()
  end
  --
  cam:drawsel()
@@ -862,16 +876,16 @@ function cullnclip(v_wrld,v_view)
     {0,0,1},v_view,polyidx)
    -- final polygon to render
    if tc then
-	   local z=0
+	   local z,y=0,0
 	   for iv in all(tc) do
-	    z=max(z,v_view[iv][3]
-	     +abs(v_view[iv][2]))
+	    z=max(z,v_view[iv][3])
+	    y=max(y,abs(v_view[iv][2]))
 	   end
 	   add(vispolys,{
 	    poly=tc,
 	    col=poly[#poly],
 	    idx=k,
-	    key=z
+	    key=z+y
 	   })
 	  end
   end
@@ -941,6 +955,24 @@ function draw_marker(cam,mrk_mdl)
  vrtx=cam:proj(vrtx)
  draw_lin(vrtx,mrk_mdl.lins)
 end
+
+function reset_tool()
+ ivrtx,selface=nil,nil
+ updstate=us_noselect
+end
+
+function move_3dcam(mx,my,mb,dx,dy)
+ -- make the cam move based
+ -- on ang instead of models
+ c_3d.ang+=(dx/0.05)
+ c_3d.pos[2]+=dy/4
+end
+
+function move_2dcam(mx,my,mb,dx,dy)
+ c_current.pos[1]+=dx
+ c_current.pos[2]+=dy
+end
+
 -->8
 --3d maths utils
 --from @fsouchu
