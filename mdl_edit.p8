@@ -6,7 +6,6 @@ __lua__
 
 -- resize view(port) cam
 -- add face
--- remove vrtx
 -- copy each mdl state in stack
 -- draw grid matching temple rooms size
 
@@ -70,6 +69,16 @@ local add_mnu={
  { caption="add hex prism",
    onclick=function()
     add_prism(6,c_current)
+   end
+ }
+}
+
+local del_mnu={
+ { caption="delete selection",
+   onclick=function()
+    del_vrtx(ivrtx)
+    ivrtx={}
+    inearvrtx=nil
    end
  }
 }
@@ -498,6 +507,7 @@ function update(mx,my,mb,dw)
  end
 
  ed_tool.update(mx,my,mb,dw)
+ update_normals(mdl)
  
  -- zoom
  if c_current then
@@ -609,6 +619,10 @@ function update_vrtx(mx,my,mb,dw)
   local nearsel=c_current:nearselvrtx(mx,my)
   if mousemode==mm_point then
    update_focus(mx,my)
+   if m_pressed(mb,2) and not ctx_mnu then
+    ctx_mnu=init_context_mnu(mx,my,del_mnu)
+   end
+   if (ctx_mnu) return
   elseif mousemode==mm_drag then
    dx,dy=mx-drag_orig[1],
          my-drag_orig[2]
@@ -618,7 +632,6 @@ function update_vrtx(mx,my,mb,dw)
    -- 
    if mb&1==0 then
     mousemode=mm_point
-    update_normals(mdl)
     return
    end
   end
@@ -662,7 +675,6 @@ function update_face(mx,my,mb,dw)
 	 colpick:update(mx,my,mb,dw)
 	 local poly=mdl.polys[selface]
 	 if (poly) poly[#poly]=colpick.col
-	 update_normals(mdl)
 	 return
 	end
 
@@ -777,15 +789,15 @@ function draw_cam(cam)
   -- draw normals
   pnormals=_normcnt
   cam.p_normcnt=pnormals
-  draw_points(pnormals,8)
+
   draw_circ({pnormals[inearnormal]},15)
   if selface then
    draw_circ({pnormals[selface]},7)
   end
   --  
   draw_selected_vrtx(vrtx,v_view)
-  draw_visible_vrtx(vrtx,v_view)
-
+  draw_visible_vrtx(vrtx,v_view,5)
+  draw_visible_vrtx(pnormals,v_vwcnt,8)
  else 
   -- 2d wire rendering
   vrtx=cam:proj(vrtx)
@@ -832,7 +844,7 @@ function draw_selected_vrtx(vrtx,v_view)
  end
 end
 
-function draw_visible_vrtx(vrtx,v_view)
+function draw_visible_vrtx(vrtx,v_view,col)
  -- draw all vertex
  local visvrtx={}
  for k,v in pairs(vrtx) do
@@ -840,7 +852,7 @@ function draw_visible_vrtx(vrtx,v_view)
    add(visvrtx,v)
   end
  end
- draw_points(visvrtx,5)
+ draw_points(visvrtx,col)
 end
 function isvrtxvisible(v_view,iv)
  return not v_view
@@ -1343,7 +1355,6 @@ function add_prism(nface,cam)
  for k=st_vrtx,end_vrtx do
   add(selvrtx,k+1)
  end
- update_normals(mdl)
  ivrtx=selvrtx
  updstate=us_editvrtx
 end
@@ -1442,6 +1453,51 @@ function del_face(selface)
  local polys=mdl.polys
 	del(polys,polys[selface])
 end
+
+function del_vrtx(selvrtx)
+	local vrtx,polys=
+	 mdl.vrtx,mdl.polys
+	
+	for i=#selvrtx,1,-1 do
+	 local isv=selvrtx[i]
+	 printh("del isv "..isv)
+	 --delete vrtx
+	 del(vrtx,vrtx[isv])
+  for poly in all(polys) do
+	  del_poly_vrtx(isv,poly)
+	  dec_poly_vrtx(isv,poly)
+ 	end
+ 	-- in reverse to avoid testholes
+ 	for k=#polys,1,-1 do
+  	poly=polys[k]
+ 	 --delete face
+ 	 if #poly<=3 then
+ 	  del_face(k)
+ 	 end
+  end
+	end
+	printh(table_to_str(mdl))
+end
+
+function del_poly_vrtx(isv,poly)
+ for j=1,#poly-1 do
+  local iv=poly[j] 
+  if iv==isv then
+   del(poly,iv)
+   return
+  end
+ end
+end
+function dec_poly_vrtx(isv,poly)
+ for j=1,#poly-1 do
+  local iv=poly[j]
+  if iv>isv then
+   --decrease >isv in polys
+   poly[j]=iv-1
+  end
+ end
+end
+
 -->8
 -- export / import
 
@@ -1486,7 +1542,6 @@ function import()
 -- assert(_mdl)
 -- assert(_mdl)
  mdl=_mdl
- update_normals(mdl)
 end
 
 
