@@ -5,8 +5,8 @@ __lua__
 -- @yourykiki
 
 -- resize view(port) cam
--- add/remove face
--- add more volumes
+-- add face
+-- remove vrtx
 -- copy each mdl state in stack
 -- draw grid matching temple rooms size
 
@@ -59,17 +59,17 @@ local dith2={
 local add_mnu={
  { caption="add cube",
    onclick=function()
-    add_cube()
+    add_prism(4,c_current)
    end
  },
- { caption="item 2",
+ { caption="add pent prism",
    onclick=function()
-    sfx(2)
+    add_prism(5,c_current)
    end
  },
- { caption="item 3",
+ { caption="add hex prism",
    onclick=function()
-    sfx(2)
+    add_prism(6,c_current)
    end
  }
 }
@@ -885,7 +885,7 @@ function cullnclip(v_wrld,v_view)
 	    poly=tc,
 	    col=poly[#poly],
 	    idx=k,
-	    key=z+y
+	    key=z -- +y
 	   })
 	  end
   end
@@ -1274,28 +1274,6 @@ function m_pressed(mb,n)
  return mb&n==n and pmb&n==0
 end
 
---
-function add_cube()
- cub="{polys={{1,2,3,4,0},"
-  .."{5,6,7,8,84},{8,7,2,1,84},"
-  .."{4,3,6,5,84},{7,6,3,2,84},"
-  .."{4,5,8,1,84}},"
-  .."vrtx={{-4,0,-4},{-4,8,-4},"
-  .."{4,8,-4},{4,0,-4},{4,0,4},"
-  .."{4,8,4},{-4,8,4},{-4,0,4}}}"
- local st_vrtx=#(mdl.vrtx)
- local _mdl=tbl_parse(cub)
-printh("add_cube:"..table_to_str(_mdl))
- add_model(_mdl)
- ed_vrtx=#(mdl.vrtx)-1
- local selvrtx={}
- for k=st_vrtx,ed_vrtx do
-  add(selvrtx,k+1)
- end
- ivrtx=selvrtx
- updstate=us_editvrtx
-end
-
 -- add mdl vrtx to world vrtx
 -- update polygone vrtx index
 function add_model(_mdl)
@@ -1314,6 +1292,81 @@ function add_model(_mdl)
  end
 end
 
+function add_prism(nface,cam)
+ local lvrtx,lpolys,face,
+  top,bot,lcol,md=
+  {},{},{},{},{},col1,--todo last col
+  nface*2
+ for i=1,nface do
+  local x,z=
+   ( 6*cos(i/nface+1/md)+0.5)\1,
+   (-6*sin(i/nface+1/md)+0.5)\1
+  addvrtx(lvrtx,cam.ax,x,z)
+  add(bot,i*2)
+  add(top,(nface+1-i)*2-1)
+ end
+ for i=1,nface+1 do
+  local ev,od=(i*2-1)%md+1,(i*2-2)%md+1
+  if #face==0 then
+   face={ev,od}
+  else
+   add(face,od)
+   add(face,ev)
+  end
+  if #face==4 then
+   add(face,lcol)
+   add(lpolys,face)
+   face={ev,od}
+  end
+ end
+ --top
+ add(bot,lcol)
+ add(lpolys,bot)
+ add(top,lcol)
+ add(lpolys,top)
+
+-- transform(lvrtx,
+--  pos[1],pos[2],pos[3],ry)
+
+ local lwalls={}
+ 
+ _mdl={
+  vrtx=lvrtx,
+  polys=lpolys,
+  walls=lwalls
+ }
+ 
+ local st_vrtx=#(mdl.vrtx)
+ add_model(_mdl)
+ local end_vrtx=#(mdl.vrtx)-1
+ local selvrtx={}
+ for k=st_vrtx,end_vrtx do
+  add(selvrtx,k+1)
+ end
+ update_normals(mdl)
+ ivrtx=selvrtx
+ updstate=us_editvrtx
+end
+
+-- adapt to the camera axis
+function addvrtx(lvrtx,ax,x,z)
+ local nax={1,2,3}
+ del(nax,ax[1])
+ del(nax,ax[2])
+ local axy=nax[1]
+ if (axy==3) x,z=z,x
+ local v1,v2={},{}
+ --
+ v1[ax[1]]=x
+ v1[axy]=4
+ v1[ax[2]]=z
+ v2[ax[1]]=x
+ v2[axy]=-4
+ v2[ax[2]]=z
+ --
+ add(lvrtx,v1)
+ add(lvrtx,v2)
+end
 -- test local clipin,clipout=0,1
 function t_clip(
  v_pln,v_nrm,v_view,polyidx)
