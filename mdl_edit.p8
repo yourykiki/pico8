@@ -170,14 +170,35 @@ function init_cam(name,vx,vy,ax)
   end,
   endselect=function(self)
    self.sel.a=false
-   local selvrtx={}
    self:sortsel()
+  end,
+  selectvrtx=function(self)
+   local selvrtx,sel={},self.sel
+   if sel.x1==sel.x2 and
+      sel.y1==sel.y2 then
+    ivrtx={inearvrtx}
+    return
+   end
    for k,v in pairs(self.p_vrtx) do
     if self:vinsel(v) then
      add(selvrtx,k)
     end
    end
    ivrtx=selvrtx
+  end,
+  selectface=function(self)
+   local _selface,sel={},self.sel
+   if sel.x1==sel.x2 and
+      sel.y1==sel.y2 then
+    selface={inearnormal}
+    return
+   end
+   for k,v in pairs(self.p_normcnt) do
+    if self:vinsel(v) then
+     add(_selface,k)
+    end
+   end
+   selface=_selface
   end,
   vinsel=function(self,v)
    local sel,vx,vy=self.sel,
@@ -437,7 +458,7 @@ function init_col_picker()
    if m_pressed(mb,1) then
     if colsel[0] then
      self.col=
-      (self.col&0xf0)|sel[0]
+      (self.col&0xf0)|colsel[0]
     elseif colsel[1] then
      self.col=
       (self.col&0x0f)|(colsel[1]<<4)
@@ -474,9 +495,6 @@ function init_col_picker()
    end
    --
    draw_icons(self,4,y+22)
---   local delicon=32
---   if (delface) delicon+=16
---   spr(delicon,4,y+22)
   end
  }
 end
@@ -640,6 +658,8 @@ function update_vrtx(mx,my,mb,dw)
   if mb&1==0 then
    -- store mx,my end
    c_current:endselect()
+   c_current:selectvrtx()
+
    -- check if vrtx selected
    if #ivrtx>0 then
     updstate=us_editvrtx
@@ -701,45 +721,59 @@ function update_face(mx,my,mb,dw)
  --
  if (c_current) c_current:near_normals(mx,my)
 	
-	-- inside colpick 
+	-- inside colpick
  if selface and colpick:isinside(mx,my,mb) then
 	 colpick:update(mx,my,mb,dw)
-	 local poly=mdl.polys[selface]
-	 if (poly) poly[#poly]=colpick.col
+	 for v in all(selface) do
+ 	 local poly=mdl.polys[v]
+ 	 if (poly) poly[#poly]=colpick.col
+ 	end
 	 return
 	end
 
  if updstate==us_noselect then
   update_focus(mx,my)
-	 if m_pressed(mb,1) then
-	  -- if near a normal, select it
-   selface=inearnormal
+
+  if mb&1==1 then
+   -- store mx,my start
+   c_current:startselect(mx,my)
+   updstate=us_select
+  end
+  
+ elseif updstate==us_select then
+  c_current:updselect(mx,my)
+  if mb&1==0 then
+   -- store mx,my end
+   c_current:endselect()
+   c_current:selectface()
+
+   -- check if face selected
 	  if selface then
 	   updstate=us_editface
 	   update_colpick()
-	  end
-
---	 elseif m_pressed(mb,2) and not ctx_mnu then
---	  -- context menu
---	  ctx_mnu=init_context_mnu(mx,my,add_mnu)
-	 end
+	  else
+    updstate=us_noselect
+   end
+  end
 	elseif updstate==us_editface then
 	 -- apply color of color picker
 	 -- or delegate to it
 	 if m_pressed(mb,1) then
-	  selface=inearnormal
-	  if selface then
-	   update_colpick()
-	  else
+--	  selface=inearnormal
+--	  if selface then
+--	   update_colpick()
+--	  else
  	  updstate=us_noselect
- 	 end
+-- 	 end
 	 end
 	end
 end
 
 function update_colpick()
- local poly=mdl.polys[selface]
- colpick.col=poly[#poly]
+ for v in all(selface) do
+  local poly=mdl.polys[v]
+  colpick.col=poly[#poly]
+ end
 end
 
 function update_capt(mx,my,mb,dw)
@@ -764,7 +798,7 @@ function _draw()
  if ctx_mnu then
   ctx_mnu:draw()
  end
- if selface then
+ if selface and #selface>0 then
   colpick:draw()
  end
  spr(0,stat(32)-1,stat(33)-1)
@@ -831,7 +865,9 @@ function draw_cam(cam)
   if ed_tool.name~=ed_capt then
    draw_circ({pnormals[inearnormal]},15)
    if selface then
-    draw_circ({pnormals[selface]},7)
+    for v in all(selface) do
+     draw_circ({pnormals[v]},7)
+    end
    end
    --  
    draw_selected_vrtx(vrtx,v_view)
@@ -1518,18 +1554,23 @@ end
 
 function inv_face(selface)
  local polys=mdl.polys
- local poly,new=polys[selface],{}
  
- for i=#poly-1,1,-1 do
-  add(new,poly[i])
+ for v in all(selface) do
+  local poly,new=polys[v],{}
+ 
+  for i=#poly-1,1,-1 do
+   add(new,poly[i])
+  end
+  polys[v]=new
+  new[#poly]=poly[#poly]
  end
- polys[selface]=new
- new[#poly]=poly[#poly]
 end
 
 function del_face(selface)
  local polys=mdl.polys
-	del(polys,polys[selface])
+ for v in all(selface) do
+ 	del(polys,polys[v])
+ end
 end
 
 function del_vrtx(selvrtx)
