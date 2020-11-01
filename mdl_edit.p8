@@ -1568,7 +1568,8 @@ end
 
 function del_face(selface)
  local polys=mdl.polys
- for v in all(selface) do
+ for i=#selface,1,-1 do
+  local v=selface[i]
  	del(polys,polys[v])
  end
 end
