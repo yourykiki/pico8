@@ -4,7 +4,7 @@ __lua__
 -- 3d model editor
 -- @yourykiki
 
--- add face
+-- lastcol
 -- copy each mdl state in stack
 -- draw grid matching temple rooms size
 
@@ -13,7 +13,8 @@ __lua__
 local c_top,c_side,c_front,c_3d,
  mdl,mrk_mdl,c_current,ivrtx,
  toolb,modal,ctx_mnu,pmb,colpick,
- inearvrtx,inearnormal,selface
+ inearvrtx,inearnormal,selface,
+ newface
 local top,sid,fro,normals,normcnt=
  {1,3},{1,2},{3,2},{},{}
 local v_up={0,1,0}
@@ -27,7 +28,8 @@ local updstate,
  us_noselect,
  us_select,
  us_editvrtx,
- us_editface=0,0,1,2,3
+ us_editface,
+ us_addface=0,0,1,2,3,4
 
 local mousemode,
  mm_point,
@@ -54,7 +56,7 @@ local dith2={
  0xf5fa,0xf7fa,0xf7fe,0xffff
 }
 
-local add_mnu={
+local addvol_mnu={
  { caption="add cube",
    onclick=function()
     add_prism(4,c_current)
@@ -78,6 +80,28 @@ local del_mnu={
     del_vrtx(ivrtx)
     ivrtx={}
     inearvrtx=nil
+    updstate=us_noselect
+   end
+ }
+}
+local addfac_mnu={
+ { caption="add face",
+   onclick=function()
+    newface={}
+    updstate=us_addface
+   end
+ }
+}
+local endfac_mnu={
+ { caption="accept face",
+   onclick=function()
+    add_face()
+    updstate=us_noselect
+   end
+ },
+ { caption="cancel",
+   onclick=function()
+    newface=nil
     updstate=us_noselect
    end
  }
@@ -650,7 +674,7 @@ function update_vrtx(mx,my,mb,dw)
    c_current:startselect(mx,my)
    updstate=us_select
   elseif m_pressed(mb,2) and not ctx_mnu then
-   ctx_mnu=init_context_mnu(mx,my,add_mnu)
+   ctx_mnu=init_context_mnu(mx,my,addvol_mnu)
   end
 
  elseif updstate==us_select then
@@ -738,8 +762,10 @@ function update_face(mx,my,mb,dw)
    -- store mx,my start
    c_current:startselect(mx,my)
    updstate=us_select
+  elseif m_pressed(mb,2) and not ctx_mnu then
+   ctx_mnu=init_context_mnu(mx,my,addfac_mnu)
   end
-  
+
  elseif updstate==us_select then
   c_current:updselect(mx,my)
   if mb&1==0 then
@@ -748,7 +774,7 @@ function update_face(mx,my,mb,dw)
    c_current:selectface()
 
    -- check if face selected
-	  if selface then
+	  if selface and #selface>0 then
 	   updstate=us_editface
 	   update_colpick()
 	  else
@@ -756,15 +782,19 @@ function update_face(mx,my,mb,dw)
    end
   end
 	elseif updstate==us_editface then
+  update_focus(mx,my)
 	 -- apply color of color picker
 	 -- or delegate to it
 	 if m_pressed(mb,1) then
---	  selface=inearnormal
---	  if selface then
---	   update_colpick()
---	  else
- 	  updstate=us_noselect
--- 	 end
+	  updstate=us_noselect
+	 end
+	elseif updstate==us_addface then
+  -- 
+  c_current:near_vrtx(mx,my)
+  if m_pressed(mb,1) then
+   add(newface,inearvrtx)
+  elseif m_pressed(mb,2) and not ctx_mnu then
+   ctx_mnu=init_context_mnu(mx,my,endfac_mnu)  
 	 end
 	end
 end
@@ -873,6 +903,7 @@ function draw_cam(cam)
    draw_selected_vrtx(vrtx,v_view)
    draw_visible_vrtx(vrtx,v_view,5)
    draw_visible_vrtx(pnormals,v_vwcnt,8)
+   draw_newface(vrtx)
   end
  else 
   -- 2d wire rendering
@@ -891,6 +922,7 @@ function draw_cam(cam)
   -- draw all vertex
   draw_points(vrtx,5)
   cam:draworig()
+  draw_newface(vrtx)
  end
  --
  cam:drawsel()
@@ -899,6 +931,18 @@ function draw_cam(cam)
  end
  print(cam.name,2,2,6)
  clip()
+end
+
+function draw_newface(vrtx)
+ if (not newface) return
+ print""
+ print(#newface)
+ local lv=vrtx[newface[#newface]]
+ for i=1,#newface do
+  local v=vrtx[newface[i]] 
+  line(lv[1],lv[2],v[1],v[2],11)
+  lv=v
+ end
 end
 
 function draw_selected_vrtx(vrtx,v_view)
@@ -1592,7 +1636,7 @@ function del_vrtx(selvrtx)
   	poly=polys[k]
  	 --delete face
  	 if #poly<=3 then
- 	  del_face(k)
+ 	  del_face({k})
  	 end
   end
 	end
@@ -1616,6 +1660,12 @@ function dec_poly_vrtx(isv,poly)
    poly[j]=iv-1
   end
  end
+end
+function add_face()
+ local polys=mdl.polys
+ add(polys,newface)
+ add(newface,84)--lastcol
+ newface=nil
 end
 
 -->8
