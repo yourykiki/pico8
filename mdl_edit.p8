@@ -4,7 +4,6 @@ __lua__
 -- 3d model editor
 -- @yourykiki
 
--- lastcol
 -- copy each mdl state in stack
 -- draw grid matching temple rooms size
 
@@ -14,7 +13,7 @@ local c_top,c_side,c_front,c_3d,
  mdl,mrk_mdl,c_current,ivrtx,
  toolb,modal,ctx_mnu,pmb,colpick,
  inearvrtx,inearnormal,selface,
- newface
+ newface,lastcol
 local top,sid,fro,normals,normcnt=
  {1,3},{1,2},{3,2},{},{}
 local v_up={0,1,0}
@@ -487,6 +486,7 @@ function init_col_picker()
      self.col=
       (self.col&0x0f)|(colsel[1]<<4)
     end
+    lastcol=self.col
    end
   end,
   draw=function(self)
@@ -1454,7 +1454,7 @@ end
 function add_prism(nface,cam)
  local lvrtx,lpolys,face,
   top,bot,lcol,md=
-  {},{},{},{},{},col1,--todo last col
+  {},{},{},{},{},lastcol,
   nface*2
  for i=1,nface do
   local x,z=
@@ -1664,7 +1664,7 @@ end
 function add_face()
  local polys=mdl.polys
  add(polys,newface)
- add(newface,84)--lastcol
+ add(newface,lastcol)
  newface=nil
 end
 
