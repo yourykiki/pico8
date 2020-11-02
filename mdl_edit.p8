@@ -13,9 +13,10 @@ local c_top,c_side,c_front,c_3d,
  mdl,mrk_mdl,c_current,ivrtx,
  toolb,modal,ctx_mnu,pmb,colpick,
  inearvrtx,inearnormal,selface,
- newface,lastcol
-local top,sid,fro,normals,normcnt=
- {1,3},{1,2},{3,2},{},{}
+ newface
+local top,sid,fro,normals,
+ normcnt,lastcol=
+ {1,3},{1,2},{3,2},{},{},84
 local v_up={0,1,0}
 
 --0 no selection
