@@ -4,6 +4,8 @@ __lua__
 -- 3d model editor
 -- @yourykiki
 
+-- rotate selection ?
+-- shellsort ?
 -- copy each mdl state in stack
 -- draw grid matching temple rooms size
 
@@ -77,10 +79,15 @@ local addvol_mnu={
 local del_mnu={
  { caption="delete selection",
    onclick=function()
-    del_vrtx(ivrtx)
+    del_vrtx(ivrtx,mdl)
     ivrtx={}
     inearvrtx=nil
     updstate=us_noselect
+   end
+ },
+ { caption="dupl. selection",
+   onclick=function()
+    duplicate(ivrtx)
    end
  }
 }
@@ -1499,6 +1506,10 @@ function add_prism(nface,cam)
  local st_vrtx=#(mdl.vrtx)
  add_model(_mdl)
  local end_vrtx=#(mdl.vrtx)-1
+ select_vrtx(st_vrtx,end_vrtx)
+end
+
+function select_vrtx(st_vrtx,end_vrtx)
  local selvrtx={}
  for k=st_vrtx,end_vrtx do
   add(selvrtx,k+1)
@@ -1611,17 +1622,17 @@ function inv_face(selface)
  end
 end
 
-function del_face(selface)
- local polys=mdl.polys
+function del_face(selface,_mdl)
+ local polys=_mdl.polys
  for i=#selface,1,-1 do
   local v=selface[i]
  	del(polys,polys[v])
  end
 end
 
-function del_vrtx(selvrtx)
+function del_vrtx(selvrtx,_mdl)
 	local vrtx,polys=
-	 mdl.vrtx,mdl.polys
+	 _mdl.vrtx,_mdl.polys
 	
 	for i=#selvrtx,1,-1 do
 	 local isv=selvrtx[i]
@@ -1637,11 +1648,12 @@ function del_vrtx(selvrtx)
   	poly=polys[k]
  	 --delete face
  	 if #poly<=3 then
- 	  del_face({k})
+ 	  del_face({k},_mdl)
  	 end
   end
 	end
-	printh(table_to_str(mdl))
+	--debug
+	--printh(table_to_str(_mdl))
 end
 
 function del_poly_vrtx(isv,poly)
@@ -1708,13 +1720,8 @@ function import()
  local past_str=stat(4)
  local _mdl=tbl_parse(past_str)
  export(_mdl)
- -- test vrtx/polys...
--- assert(_mdl.vrtx)
--- assert(_mdl)
--- assert(_mdl)
  mdl=_mdl
 end
-
 
 -- import 
 function match(s,tokens)
@@ -1782,6 +1789,38 @@ function tbl_parse(str,pos)
   return parse_str_val(str,pos,"")
  end
 end
+
+
+function duplicate(selvrtx)
+ local str=table_to_str(mdl)
+ local _mdl=tbl_parse(str)
+ --invert selection
+ local othvrtx={}
+ for iv=1,#(mdl.vrtx) do
+  add(othvrtx,iv)
+ end
+ for iv in all(selvrtx) do
+  del(othvrtx,iv)
+ end
+ --delete other vrtx
+ printh(table_to_str(_mdl))
+ del_vrtx(othvrtx,_mdl)
+ printh(table_to_str(_mdl))
+ local st_vrtx=#(mdl.vrtx)
+ add_model(_mdl)
+ local end_vrtx=#(mdl.vrtx)-1
+ select_vrtx(st_vrtx,end_vrtx)
+end
+
+function select_vrtx(st_vrtx,end_vrtx)
+ local selvrtx={}
+ for k=st_vrtx,end_vrtx do
+  add(selvrtx,k+1)
+ end
+ ivrtx=selvrtx
+ updstate=us_editvrtx
+end
+
 
 __gfx__
 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
