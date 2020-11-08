@@ -4,12 +4,13 @@ __lua__
 -- 3d model editor
 -- @yourykiki
 
+-- switch rotate in fullscreen
 -- rotate selection ?
--- shellsort ?
 -- copy each mdl state in stack
 -- draw grid matching temple rooms size
 
 -- c_3d on a sphere look at 0,0,0
+-- or moving camera
 
 local c_top,c_side,c_front,c_3d,
  mdl,mrk_mdl,c_current,ivrtx,
@@ -17,8 +18,8 @@ local c_top,c_side,c_front,c_3d,
  inearvrtx,inearnormal,selface,
  newface
 local top,sid,fro,normals,
- normcnt,lastcol=
- {1,3},{1,2},{3,2},{},{},84
+ normcnt,lastcol,mdlstate,istate=
+ {1,3},{1,2},{3,2},{},{},84,{},0
 local v_up={0,1,0}
 
 --0 no selection
@@ -83,11 +84,13 @@ local del_mnu={
     ivrtx={}
     inearvrtx=nil
     updstate=us_noselect
+    pushmodel(mdl)
    end
  },
  { caption="dupl. selection",
    onclick=function()
     duplicate(ivrtx)
+    pushmodel(mdl)
    end
  }
 }
@@ -104,6 +107,7 @@ local endfac_mnu={
    onclick=function()
     add_face()
     updstate=us_noselect
+    pushmodel(mdl)
    end
  },
  { caption="cancel",
@@ -126,6 +130,7 @@ function _init()
  c_3d.proj=proj3d
  -- load default model
  mdl=make_cube({0,0,0},0)
+ pushmodel(mdl)
  update_normals(mdl)
  mrk_mdl=make_marker()
  -- toolbar
@@ -255,6 +260,9 @@ function init_cam(name,vx,vy,ax)
     if (bu) vrtx[i][ax[2]]+=1
     if (bd) vrtx[i][ax[2]]-=1
    end
+   if bl or br or bu or db then
+    pushmodel(mdl)
+   end
   end,
   movedragselvrtx=function(self,dx,dy,vrtx)
    for i in all(ivrtx) do
@@ -338,6 +346,29 @@ function init_toolbar()
    {icon=2,
     onclick=function()
      export(mdl)
+    end
+   },
+   {icon=6,onclick=noop},
+   {icon=9,
+    onclick=function()
+     if #mdlstate>1 then
+      mdl=pop_model()
+      reset_tool()
+     end
+    end,
+    tgl=function()
+     return #mdlstate>1
+    end
+   },
+   {icon=10,
+    onclick=function()
+     if istate<#mdlstate then
+      mdl=pop_model(1)
+      reset_tool()
+     end
+    end,
+    tgl=function()
+     return istate<#mdlstate
     end
    },
    {icon=6,onclick=noop},
@@ -455,10 +486,11 @@ function init_col_picker()
   col=0x84,
   delface=false,
   colsel={},
+  colchange=false,
   actions={
    {icon=32,
     onclick=function()
-     del_face(selface)
+     del_face(selface,mdl)
      selface=nil
     end,
    },
@@ -474,6 +506,7 @@ function init_col_picker()
   end,
   update=function(self,mx,my,mb,dw)
    --change color
+   self.colchange=false
    local y=128-self.h
    local colsel=self.colsel
    colsel[0],colsel[1]=nil,nil
@@ -495,6 +528,7 @@ function init_col_picker()
       (self.col&0x0f)|(colsel[1]<<4)
     end
     lastcol=self.col
+    self.colchange=true
    end
   end,
   draw=function(self)
@@ -717,6 +751,7 @@ function update_vrtx(mx,my,mb,dw)
    -- 
    if mb&1==0 then
     mousemode=mm_point
+    pushmodel(mdl)
     return
    end
   end
@@ -756,9 +791,12 @@ function update_face(mx,my,mb,dw)
 	-- inside colpick
  if selface and colpick:isinside(mx,my,mb) then
 	 colpick:update(mx,my,mb,dw)
-	 for v in all(selface) do
- 	 local poly=mdl.polys[v]
- 	 if (poly) poly[#poly]=colpick.col
+	 if colpick.colchange then
+	  for v in all(selface) do
+  	 local poly=mdl.polys[v]
+  	 if (poly) poly[#poly]=colpick.col
+  	end
+  	pushmodel(mdl)
  	end
 	 return
 	end
@@ -791,8 +829,7 @@ function update_face(mx,my,mb,dw)
   end
 	elseif updstate==us_editface then
   update_focus(mx,my)
-	 -- apply color of color picker
-	 -- or delegate to it
+	 -- color handled by color picker
 	 if m_pressed(mb,1) then
 	  updstate=us_noselect
 	 end
@@ -840,6 +877,7 @@ function _draw()
   colpick:draw()
  end
  spr(0,stat(32)-1,stat(33)-1)
+ print("istate "..istate,0,12,7)
 end
 
 function draw_cam(cam)
@@ -1036,7 +1074,8 @@ end
 function draw_polys(vispolys,vrtx)
 
  -- sorting visible poly
- shellsort(vispolys)
+ --shellsort(vispolys)
+ heap_sort(vispolys)
 
  --light
  local lgt={1,-1,0} 
@@ -1303,6 +1342,52 @@ function shellsort(a)
   end
  end
 end
+
+-- morgan3d
+-- https://www.lexaloffle.com/bbs/?tid=2477
+function heap_sort(data)
+ local n=#data
+
+ for i=flr(n/2)+1,1,-1 do
+  local parent,value,m=i,data[i],i+i
+  local key=value.key 
+
+  while m<=n do
+   if ((m<n) and (data[m+1].key>data[m].key)) m+=1
+   local mval=data[m]
+   if (key>mval.key) break
+   data[parent]=mval
+   parent=m
+   m+=m
+  end
+  data[parent]=value
+ end 
+
+ for i=n,2,-1 do
+  local value = data[i]
+  data[i],data[1]=data[1],value
+
+  local parent,terminate,m=1,i-1,2
+  local key=value.key 
+
+  while m<=terminate do
+   local mval=data[m]
+   local mkey=mval.key
+   if (m<terminate) and (data[m+1].key>mkey) then
+    m+=1
+    mval=data[m]
+    mkey=mval.key
+   end
+   if (key>mkey) break
+   data[parent]=mval
+   parent=m
+   m+=m
+  end  
+
+  data[parent]=value
+ end
+end
+
 -->8
 --3d models
 local col1=0x54
@@ -1366,8 +1451,7 @@ function init_norm(_vrtx,_poly)
 end
 -->8
 -- utils @yourykiki
-function noop()
-end
+function noop()end
 function add_all(a,b)
  for x in all(b) do
   add(a,x)
@@ -1683,7 +1767,6 @@ end
 
 -->8
 -- export / import
-
 function export(mdl)
  -- format string
  local str=table_to_str(mdl)
@@ -1691,7 +1774,6 @@ function export(mdl)
  printh(str,"@clip")
  sfx(0)
 end
-
 function table_to_str(tbl)
 	local str,i="{",1
 	for k,val in pairs(tbl) do
@@ -1719,8 +1801,9 @@ function import()
  -- from clipboard
  local past_str=stat(4)
  local _mdl=tbl_parse(past_str)
- export(_mdl)
+--export(_mdl)
  mdl=_mdl
+ pushmodel(mdl)
 end
 
 -- import 
@@ -1803,9 +1886,7 @@ function duplicate(selvrtx)
   del(othvrtx,iv)
  end
  --delete other vrtx
- printh(table_to_str(_mdl))
  del_vrtx(othvrtx,_mdl)
- printh(table_to_str(_mdl))
  local st_vrtx=#(mdl.vrtx)
  add_model(_mdl)
  local end_vrtx=#(mdl.vrtx)-1
@@ -1821,31 +1902,45 @@ function select_vrtx(st_vrtx,end_vrtx)
  updstate=us_editvrtx
 end
 
+function pushmodel(mdl)
+ local nbstate=#mdlstate
+ while istate<#mdlstate do
+  mdlstate[#mdlstate]=nil
+ end
+ add(mdlstate,table_to_str(mdl))
+ istate=#mdlstate
+end
 
+function pop_model(z)
+ z=z and 1 or -1
+ istate=max(1,istate+z)
+ local str=mdlstate[istate]
+ return tbl_parse(str)
+end
 __gfx__
 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-110000000006000000060000000d000005dddd500dddddd0000000000000dd500000dd5000000000000000000000000000000000000000000000000000000000
-161000000006000000666000000000000dd0d0d00d0000d00000000005dd00d005ddddd000000000000000000000000000000000000000000000000000000000
-1661000006666600066666000d050d000d0d0dd00d0000d0000000000d0000d00dddddd000000000000000000000000000000000000000000000000000000000
-166610000066600000060000000000000dd0d0d00d0000d0000000000d0000d00dddddd000000000000000000000000000000000000000000000000000000000
-166661000006000000060000000d00000d0d0dd00d0000d0000000000d00dd500ddddd5000000000000000000000000000000000000000000000000000000000
-1166100002222200022222000000000005dddd500dddddd00000000005dd000005dd000000000000000000000000000000000000000000000000000000000000
+110000000006000000060000000d000005dddd500dddddd0000000000000dd500000dd500000dd0000dd00000000000000000000000000000000000000000000
+161000000006000000666000000000000dd0d0d00d0000d00000000005dd00d005ddddd00d0d00d00d00d0d00000000000000000000000000000000000000000
+1661000006666600066666000d050d000d0d0dd00d0000d0000000000d0000d00dddddd00dd000d00d000dd00000000000000000000000000000000000000000
+166610000066600000060000000000000dd0d0d00d0000d0000000000d0000d00dddddd00ddd00d00d00ddd00000000000000000000000000000000000000000
+166661000006000000060000000d00000d0d0dd00d0000d0000000000d00dd500ddddd50000000d00d0000000000000000000000000000000000000000000000
+1166100002222200022222000000000005dddd500dddddd00000000005dd000005dd000000dddd0000dddd000000000000000000000000000000000000000000
 00110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0006600000000000000000000000000005dddd500d0d0d000000000005dd000005dd000000000000000000000000000000000000000000000000000000000000
-006006000006000000060000000d00000d0d0dd0000000d0000000000d00dd500ddddd5000000000000000000000000000000000000000000000000000000000
-006006000006000000666000000000000dd0d0d00d000000000000000d0000d00dddddd000000000000000000000000000000000000000000000000000000000
-0006600006666600066666000d050d000d0d0dd0000000d0000000000d0000d00dddddd000000000000000000000000000000000000000000000000000000000
-000006000066600000060000000000000dd0d0d00d0000000000000005dd00d005ddddd000000000000000000000000000000000000000000000000000000000
-000000600222220002222200000d000005dddd5000d0d0d0000000000000dd500000dd5000000000000000000000000000000000000000000000000000000000
+006006000006000000060000000d00000d0d0dd0000000d0000000000d00dd500ddddd500000dd0000dd00000000000000000000000000000000000000000000
+006006000006000000666000000000000dd0d0d00d000000000000000d0000d00dddddd00d0d00d00d00d0d00000000000000000000000000000000000000000
+0006600006666600066666000d050d000d0d0dd0000000d0000000000d0000d00dddddd00dd000d00d000dd00000000000000000000000000000000000000000
+000006000066600000060000000000000dd0d0d00d0000000000000005dd00d005ddddd00ddd00d00d00ddd00000000000000000000000000000000000000000
+000000600222220002222200000d000005dddd5000d0d0d0000000000000dd500000dd5000dddd0000dddd000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-020002000080000000000000000f000005ffff500ffffff0000000000000ff500000ff5000000000000000000000000000000000000000000000000000000000
-222022200888880000000000000000000ff0f0f00f0000f00000000005ff00f005fffff000000000000000000000000000000000000000000000000000000000
-0222220000800080000000000f050f000f0f0ff00f0000f0000000000f0000f00ffffff000000000000000000000000000000000000000000000000000000000
-002220000000000000000000000000000ff0f0f00f0000f0000000000f0000f00ffffff000000000000000000000000000000000000000000000000000000000
-022222000200020000000000000f00000f0f0ff00f0000f0000000000f00ff500fffff5000000000000000000000000000000000000000000000000000000000
-2220222000222220000000000000000005ffff500ffffff00000000005ff000005ff000000000000000000000000000000000000000000000000000000000000
+020002000080000000000000000f000005ffff500ffffff0000000000000ff500000ff500000ff0000ff00000000000000000000000000000000000000000000
+222022200888880000000000000000000ff0f0f00f0000f00000000005ff00f005fffff00f0f00f00f00f0f00000000000000000000000000000000000000000
+0222220000800080000000000f050f000f0f0ff00f0000f0000000000f0000f00ffffff00ff000f00f000ff00000000000000000000000000000000000000000
+002220000000000000000000000000000ff0f0f00f0000f0000000000f0000f00ffffff00fff00f00f00fff00000000000000000000000000000000000000000
+022222000200020000000000000f00000f0f0ff00f0000f0000000000f00ff500fffff50000000f00f0000000000000000000000000000000000000000000000
+2220222000222220000000000000000005ffff500ffffff00000000005ff000005ff000000ffff0000ffff000000000000000000000000000000000000000000
 02000200000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 08000800002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
