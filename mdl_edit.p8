@@ -10,12 +10,15 @@ __lua__
 
 -- c_3d on a sphere look at 0,0,0
 -- or moving camera
+-- token war ----------------
+-- local view=c_3d.view
+-- view.tw,view.th=64,60 
 
 local c_top,c_side,c_front,c_3d,
  mdl,mrk_mdl,c_current,ivrtx,
  toolb,modal,ctx_mnu,pmb,colpick,
  inearvrtx,inearnormal,selface,
- newface
+ newelt,selnode
 local top,sid,fro,normals,
  normcnt,lastcol,mdlstate,
  istate,rotcapt=
@@ -30,17 +33,16 @@ local v_up={0,1,0}
 local updstate,
  us_noselect,
  us_select,
- us_editvrtx,
- us_editface,
- us_addface=0,0,1,2,3,4
+ us_edit,
+ us_add=0,0,1,2,3
 
 local mousemode,
  mm_point,
  mm_drag,
  drag_orig=0,0,1
 
-local ed_vrtx,ed_face,ed_capt=
- "vrtx","face","capt"
+local ed_vrtx,ed_face,ed_capt,ed_node=
+ "vrtx","face","capt","node"
 local ed_tool={name=ed_vrtx}
 
 local render,
@@ -94,29 +96,39 @@ local del_mnu={
    end
  }
 }
-local addfac_mnu={
- { caption="add face",
-   onclick=function()
-    newface={}
-    updstate=us_addface
-   end
+function getaddmnu(lbl)
+ return {
+  { caption="add "..lbl,
+    onclick=function()
+     newelt={}
+     updstate=us_add
+    end
+  }
  }
-}
-local endfac_mnu={
- { caption="accept face",
-   onclick=function()
-    add_face()
-    updstate=us_noselect
-    pushmodel(mdl)
-   end
- },
- { caption="cancel",
-   onclick=function()
-    newface=nil
-    updstate=us_noselect
-   end
+end
+function getendmnu(lbl)
+ local add_elt
+ if lbl=="face" then
+  add_elt=add_face
+ else
+  add_elt=add_node
+ end
+ return {
+  { caption="accept "..lbl,
+    onclick=function()
+     add_elt()
+     updstate=us_noselect
+     pushmodel(mdl)
+    end
+  },
+  { caption="cancel",
+    onclick=function()
+     newelt=nil
+     updstate=us_noselect
+    end
+  }
  }
-}
+end
 
 function _init()
  -- devkit mode
@@ -236,6 +248,9 @@ function init_cam(name,vx,vy,ax)
    end
    selface=_selface
   end,
+  selectnode=function(self)
+   --todo
+  end,
   vinsel=function(self,v)
    local sel,vx,vy=self.sel,
     v[1],v[2]   
@@ -333,6 +348,7 @@ function init_modal(msg,fnc,w,h)
 end
 
 function init_toolbar()
+ local noop={icon=6,onclick=function()end}
  return {
   actions={
    {icon=1,
@@ -348,7 +364,6 @@ function init_toolbar()
      export(mdl)
     end
    },
-   {icon=6,onclick=noop},
    {icon=9,
     onclick=function()
      if #mdlstate>1 then
@@ -371,7 +386,7 @@ function init_toolbar()
      return istate<#mdlstate
     end
    },
-   {icon=6,onclick=noop},
+   noop,
    {icon=3,
     onclick=function()
      ed_tool.name=ed_vrtx
@@ -392,6 +407,16 @@ function init_toolbar()
      return ed_tool.name==ed_face
     end
    },
+   {icon=12,
+    onclick=function()
+     ed_tool.name=ed_node
+     ed_tool.update=update_node
+     reset_tool()
+    end,
+    tgl=function()
+     return ed_tool.name==ed_node
+    end
+   },
    {icon=5,
     onclick=function()
      ed_tool.name=ed_capt
@@ -402,7 +427,7 @@ function init_toolbar()
      return ed_tool.name==ed_capt
     end
    },
-   {icon=6,onclick=noop},
+   noop,
    {icon=7,
     onclick=function()
      render=r_wire
@@ -419,7 +444,7 @@ function init_toolbar()
      return render==r_flat
     end
    },
-   {icon=6,onclick=noop},
+   noop,
    {icon=11,
     onclick=function()
      rotcapt=not rotcapt
@@ -737,13 +762,13 @@ function update_vrtx(mx,my,mb,dw)
 
    -- check if vrtx selected
    if #ivrtx>0 then
-    updstate=us_editvrtx
+    updstate=us_edit
    else
     updstate=us_noselect
    end
   end
   
- elseif updstate==us_editvrtx then
+ elseif updstate==us_edit then
   local nearsel=c_current:nearselvrtx(mx,my)
   if mousemode==mm_point then
    update_focus(mx,my)
@@ -818,7 +843,7 @@ function update_face(mx,my,mb,dw)
    c_current:startselect(mx,my)
    updstate=us_select
   elseif m_pressed(mb,2) and not ctx_mnu then
-   ctx_mnu=init_context_mnu(mx,my,addfac_mnu)
+   ctx_mnu=init_context_mnu(mx,my,getaddmnu"face")
   end
 
  elseif updstate==us_select then
@@ -830,27 +855,28 @@ function update_face(mx,my,mb,dw)
 
    -- check if face selected
 	  if selface and #selface>0 then
-	   updstate=us_editface
+	   updstate=us_edit
 	   update_colpick()
 	  else
     updstate=us_noselect
    end
   end
-	elseif updstate==us_editface then
+ elseif updstate==us_edit then
   update_focus(mx,my)
-	 -- color handled by color picker
-	 if m_pressed(mb,1) then
-	  updstate=us_noselect
-	 end
-	elseif updstate==us_addface then
+  -- color handled by color picker
+  if m_pressed(mb,1) then
+   updstate=us_noselect
+  end
+ elseif updstate==us_add then
   -- 
   c_current:near_vrtx(mx,my)
   if m_pressed(mb,1) then
-   add(newface,inearvrtx)
+   add(newelt,inearvrtx)
   elseif m_pressed(mb,2) and not ctx_mnu then
-   ctx_mnu=init_context_mnu(mx,my,endfac_mnu)  
-	 end
-	end
+   ctx_mnu=init_context_mnu(mx,my,
+    getendmnu"face")  
+  end
+ end
 end
 
 function update_colpick()
@@ -861,10 +887,56 @@ function update_colpick()
 end
 
 function update_capt(mx,my,mb,dw)
+ update_focus(mx,my)
  if (rotcapt) c_3d.ang+=0.005
  
  local view=c_3d.view
- view.tw,view.th=128,120
+ view.tw,view.th=129,121
+end
+
+function update_node(mx,my,mb,dw)
+ local view=c_3d.view
+ view.tw,view.th=64,60
+ 
+ if updstate==us_noselect then
+  update_focus(mx,my)
+
+  if mb&1==1 then
+   -- store mx,my start
+   c_current:startselect(mx,my)
+   updstate=us_select
+  elseif m_pressed(mb,2) and not ctx_mnu then
+   ctx_mnu=init_context_mnu(mx,my,getaddmnu"node")
+  end
+ elseif updstate==us_select then
+  c_current:updselect(mx,my)
+  if mb&1==0 then
+   -- store mx,my end
+   c_current:endselect()
+   c_current:selectnode()
+
+   -- check if node selected
+	  if selnode and #selnode>0 then
+	   updstate=us_edit
+	  else
+    updstate=us_noselect
+   end
+  end
+ elseif updstate==us_edit then
+  update_focus(mx,my)
+  if m_pressed(mb,1) then
+   updstate=us_noselect
+  end
+ elseif updstate==us_add then
+  --near face
+  c_current:near_normals(mx,my)
+  if m_pressed(mb,1) then
+   add(newelt,inearnormal)
+  elseif m_pressed(mb,2) and not ctx_mnu then
+   ctx_mnu=init_context_mnu(mx,my,
+    getendmnu"node") 
+  end
+ end
 end
 
 function _draw()
@@ -902,7 +974,8 @@ function draw_cam(cam)
  add_all(vrtx,mdl.vrtx)
  add_all(_normcnt,normcnt)
 
- local iscam3d=cam.name=="3d"
+ local iscam3d,toolname=
+  cam.name=="3d",ed_tool.name
  -- draw model
  if iscam3d then
   -- world transform
@@ -947,7 +1020,7 @@ function draw_cam(cam)
   pnormals=_normcnt
   cam.p_normcnt=pnormals
   
-  if ed_tool.name~=ed_capt then
+  if toolname~=ed_capt then
    draw_circ({pnormals[inearnormal]},15)
    if selface then
     for v in all(selface) do
@@ -958,7 +1031,9 @@ function draw_cam(cam)
    draw_selected_vrtx(vrtx,v_view)
    draw_visible_vrtx(vrtx,v_view,5)
    draw_visible_vrtx(pnormals,v_vwcnt,8)
-   draw_newface(vrtx)
+   if toolname==ed_face then
+    draw_newface(vrtx)
+   end
   end
  else 
   -- 2d wire rendering
@@ -977,7 +1052,9 @@ function draw_cam(cam)
   -- draw all vertex
   draw_points(vrtx,5)
   cam:draworig()
-  draw_newface(vrtx)
+  if toolname==ed_face then
+   draw_newface(vrtx)
+  end
  end
  --
  cam:drawsel()
@@ -989,12 +1066,10 @@ function draw_cam(cam)
 end
 
 function draw_newface(vrtx)
- if (not newface) return
- print""
- print(#newface)
- local lv=vrtx[newface[#newface]]
- for i=1,#newface do
-  local v=vrtx[newface[i]] 
+ if (not newelt) return
+ local lv=vrtx[newelt[#newelt]]
+ for i=1,#newelt do
+  local v=vrtx[newelt[i]] 
   line(lv[1],lv[2],v[1],v[2],11)
   lv=v
  end
@@ -1083,8 +1158,8 @@ end
 function draw_polys(vispolys,vrtx)
 
  -- sorting visible poly
- --shellsort(vispolys)
- heap_sort(vispolys)
+ shellsort(vispolys)
+ --heap_sort(vispolys)
 
  --light
  local lgt={1,-1,0} 
@@ -1354,48 +1429,48 @@ end
 
 -- morgan3d
 -- https://www.lexaloffle.com/bbs/?tid=2477
-function heap_sort(data)
- local n=#data
-
- for i=flr(n/2)+1,1,-1 do
-  local parent,value,m=i,data[i],i+i
-  local key=value.key 
-
-  while m<=n do
-   if ((m<n) and (data[m+1].key>data[m].key)) m+=1
-   local mval=data[m]
-   if (key>mval.key) break
-   data[parent]=mval
-   parent=m
-   m+=m
-  end
-  data[parent]=value
- end 
-
- for i=n,2,-1 do
-  local value = data[i]
-  data[i],data[1]=data[1],value
-
-  local parent,terminate,m=1,i-1,2
-  local key=value.key 
-
-  while m<=terminate do
-   local mval=data[m]
-   local mkey=mval.key
-   if (m<terminate) and (data[m+1].key>mkey) then
-    m+=1
-    mval=data[m]
-    mkey=mval.key
-   end
-   if (key>mkey) break
-   data[parent]=mval
-   parent=m
-   m+=m
-  end  
-
-  data[parent]=value
- end
-end
+--function heap_sort(data)
+-- local n=#data
+--
+-- for i=flr(n/2)+1,1,-1 do
+--  local parent,value,m=i,data[i],i+i
+--  local key=value.key 
+--
+--  while m<=n do
+--   if ((m<n) and (data[m+1].key>data[m].key)) m+=1
+--   local mval=data[m]
+--   if (key>mval.key) break
+--   data[parent]=mval
+--   parent=m
+--   m+=m
+--  end
+--  data[parent]=value
+-- end 
+--
+-- for i=n,2,-1 do
+--  local value = data[i]
+--  data[i],data[1]=data[1],value
+--
+--  local parent,terminate,m=1,i-1,2
+--  local key=value.key 
+--
+--  while m<=terminate do
+--   local mval=data[m]
+--   local mkey=mval.key
+--   if (m<terminate) and (data[m+1].key>mkey) then
+--    m+=1
+--    mval=data[m]
+--    mkey=mval.key
+--   end
+--   if (key>mkey) break
+--   data[parent]=mval
+--   parent=m
+--   m+=m
+--  end  
+--
+--  data[parent]=value
+-- end
+--end
 
 -->8
 --3d models
@@ -1425,7 +1500,8 @@ function make_cube(pos,ry)
  return {
   vrtx=lvrtx,
   polys=lpolys,
-  walls=lwalls
+  walls=lwalls,
+  nodes={}
  }
 end
 
@@ -1460,7 +1536,6 @@ function init_norm(_vrtx,_poly)
 end
 -->8
 -- utils @yourykiki
-function noop()end
 function add_all(a,b)
  for x in all(b) do
   add(a,x)
@@ -1770,9 +1845,14 @@ function dec_poly_vrtx(isv,poly)
 end
 function add_face()
  local polys=mdl.polys
- add(polys,newface)
- add(newface,lastcol)
- newface=nil
+ add(polys,newelt)
+ add(newelt,lastcol)
+ newelt=nil
+end
+function add_node()
+ local nodes=mdl.nodes
+ add(nodes,newelt)
+ newelt=nil
 end
 
 -->8
@@ -1929,28 +2009,28 @@ function pop_model(z)
 end
 __gfx__
 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-110000000006000000060000000d000005dddd500dddddd0000000000000dd500000dd500000dd0000dd00000ddd000000000000000000000000000000000000
-161000000006000000666000000000000dd0d0d00d0000d00000000005dd00d005ddddd00d0d00d00d00d0d000dd0d0000000000000000000000000000000000
-1661000006666600066666000d050d000d0d0dd00d0000d0000000000d0000d00dddddd00dd000d00d000dd00d0d00d000000000000000000000000000000000
-166610000066600000060000000000000dd0d0d00d0000d0000000000d0000d00dddddd00ddd00d00d00ddd00d0000d000000000000000000000000000000000
-166661000006000000060000000d00000d0d0dd00d0000d0000000000d00dd500ddddd50000000d00d0000000d0000d000000000000000000000000000000000
-1166100002222200022222000000000005dddd500dddddd00000000005dd000005dd000000dddd0000dddd0000dddd0000000000000000000000000000000000
+110000000006000000060000000d000005dddd500dddddd0000000000000dd500000dd500000dd0000dd00000ddd00000ddd0000000000000000000000000000
+161000000006000000666000000000000dd0d0d00d0000d00000000005dd00d005ddddd00d0d00d00d00d0d000dd0d000d5d0000000000000000000000000000
+1661000006666600066666000d050d000d0d0dd00d0000d0000000000d0000d00dddddd00dd000d00d000dd00d0d00d00dd50000000000000000000000000000
+166610000066600000060000000000000dd0d0d00d0000d0000000000d0000d00dddddd00ddd00d00d00ddd00d0000d000005dd0000000000000000000000000
+166661000006000000060000000d00000d0d0dd00d0000d0000000000d00dd500ddddd50000000d00d0000000d0000d00000d5d0000000000000000000000000
+1166100002222200022222000000000005dddd500dddddd00000000005dd000005dd000000dddd0000dddd0000dddd000000ddd0000000000000000000000000
 00110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0006600000000000000000000000000005dddd500d0d0d000000000005dd000005dd000000000000000000000000000000000000000000000000000000000000
-006006000006000000060000000d00000d0d0dd0000000d0000000000d00dd500ddddd500000dd0000dd00000ddd000000000000000000000000000000000000
-006006000006000000666000000000000dd0d0d00d000000000000000d0000d00dddddd00d0d00d00d00d0d000dd0d0000000000000000000000000000000000
-0006600006666600066666000d050d000d0d0dd0000000d0000000000d0000d00dddddd00dd000d00d000dd00d0d00d000000000000000000000000000000000
-000006000066600000060000000000000dd0d0d00d0000000000000005dd00d005ddddd00ddd00d00d00ddd00d0000d000000000000000000000000000000000
-000000600222220002222200000d000005dddd5000d0d0d0000000000000dd500000dd5000dddd0000dddd0000dddd0000000000000000000000000000000000
+0006600000000000000000000000000005dddd500d0d0d000000000005dd000005dd00000000000000000000000000000000ddd0000000000000000000000000
+006006000006000000060000000d00000d0d0dd0000000d0000000000d00dd500ddddd500000dd0000dd00000ddd00000000d5d0000000000000000000000000
+006006000006000000666000000000000dd0d0d00d000000000000000d0000d00dddddd00d0d00d00d00d0d000dd0d0000005dd0000000000000000000000000
+0006600006666600066666000d050d000d0d0dd0000000d0000000000d0000d00dddddd00dd000d00d000dd00d0d00d00dd50000000000000000000000000000
+000006000066600000060000000000000dd0d0d00d0000000000000005dd00d005ddddd00ddd00d00d00ddd00d0000d00d5d0000000000000000000000000000
+000000600222220002222200000d000005dddd5000d0d0d0000000000000dd500000dd5000dddd0000dddd0000dddd000ddd0000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-020002000080000000000000000f000005ffff500ffffff0000000000000ff500000ff500000ff0000ff00000fff000000000000000000000000000000000000
-222022200888880000000000000000000ff0f0f00f0000f00000000005ff00f005fffff00f0f00f00f00f0f000ff0f0000000000000000000000000000000000
-0222220000800080000000000f050f000f0f0ff00f0000f0000000000f0000f00ffffff00ff000f00f000ff00f0f00f000000000000000000000000000000000
-002220000000000000000000000000000ff0f0f00f0000f0000000000f0000f00ffffff00fff00f00f00fff00f0000f000000000000000000000000000000000
-022222000200020000000000000f00000f0f0ff00f0000f0000000000f00ff500fffff50000000f00f0000000f0000f000000000000000000000000000000000
-2220222000222220000000000000000005ffff500ffffff00000000005ff000005ff000000ffff0000ffff0000ffff0000000000000000000000000000000000
+020002000080000000000000000f000005ffff500ffffff0000000000000ff500000ff500000ff0000ff00000fff00000fff0000000000000000000000000000
+222022200888880000000000000000000ff0f0f00f0000f00000000005ff00f005fffff00f0f00f00f00f0f000ff0f000f5f0000000000000000000000000000
+0222220000800080000000000f050f000f0f0ff00f0000f0000000000f0000f00ffffff00ff000f00f000ff00f0f00f00ff50000000000000000000000000000
+002220000000000000000000000000000ff0f0f00f0000f0000000000f0000f00ffffff00fff00f00f00fff00f0000f000005ff0000000000000000000000000
+022222000200020000000000000f00000f0f0ff00f0000f0000000000f00ff500fffff50000000f00f0000000f0000f00000f5f0000000000000000000000000
+2220222000222220000000000000000005ffff500ffffff00000000005ff000005ff000000ffff0000ffff0000ffff000000fff0000000000000000000000000
 02000200000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 08000800002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
