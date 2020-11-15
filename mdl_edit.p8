@@ -958,7 +958,7 @@ function _draw()
   colpick:draw()
  end
  spr(0,stat(32)-1,stat(33)-1)
--- print("istate "..istate,0,12,7)
+ --print("updstate "..updstate,0,12,7)
 end
 
 function draw_cam(cam)
@@ -1684,7 +1684,7 @@ function select_vrtx(st_vrtx,end_vrtx)
   add(selvrtx,k+1)
  end
  ivrtx=selvrtx
- updstate=us_editvrtx
+ updstate=us_edit
 end
 
 -- adapt to the camera axis
@@ -1850,8 +1850,9 @@ function add_face()
  newelt=nil
 end
 function add_node()
- local nodes=mdl.nodes
- add(nodes,newelt)
+ local nodes,node=mdl.nodes,
+  {polys=newelt,conn={}}
+ add(nodes,node)
  newelt=nil
 end
 
@@ -1981,15 +1982,6 @@ function duplicate(selvrtx)
  add_model(_mdl)
  local end_vrtx=#(mdl.vrtx)-1
  select_vrtx(st_vrtx,end_vrtx)
-end
-
-function select_vrtx(st_vrtx,end_vrtx)
- local selvrtx={}
- for k=st_vrtx,end_vrtx do
-  add(selvrtx,k+1)
- end
- ivrtx=selvrtx
- updstate=us_editvrtx
 end
 
 function pushmodel(mdl)
