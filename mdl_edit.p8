@@ -1027,7 +1027,7 @@ function draw_cam(cam)
      draw_circ({pnormals[v]},7)
     end
    end
-   --  
+   --
    draw_selected_vrtx(vrtx,v_view)
    draw_visible_vrtx(vrtx,v_view,5)
    draw_visible_vrtx(pnormals,v_vwcnt,8)
@@ -1138,16 +1138,20 @@ function cullnclip(v_wrld,v_view)
     {0,0,1},v_view,polyidx)
    -- final polygon to render
    if tc then
-	   local z,y=0,0
+	   local z,y,n=0,0,#tc --*#tc
 	   for iv in all(tc) do
 	    z=max(z,v_view[iv][3])
-	    y=max(y,abs(v_view[iv][2]))
+	    --y=min(y,v_view[iv][2])
+	    --y=y+v_view[iv][2]+16
+	    --z+=v_view[iv][3]
 	   end
 	   add(vispolys,{
 	    poly=tc,
 	    col=poly[#poly],
 	    idx=k,
-	    key=z -- +y
+	    --key=y+10
+	    key=1/z --maxz
+	    --key=n/z
 	   })
 	  end
   end
@@ -1158,23 +1162,25 @@ end
 function draw_polys(vispolys,vrtx)
 
  -- sorting visible poly
- shellsort(vispolys)
- --heap_sort(vispolys)
+ --shellsort(vispolys)
+ heap_sort(vispolys)
 
  --light
  local lgt={1,-1,0} 
  v_normz(lgt)
  
--- for objpoly in all(vispolys) do
- for j=#vispolys,1,-1 do
-  local objpoly=vispolys[j]
+ for objpoly in all(vispolys) do
+-- for j=#vispolys,1,-1 do
+--  local objpoly=vispolys[j]
  	local poly,idx,col=
  	 objpoly.poly,
  	 objpoly.idx,
  	 objpoly.col
- 	local _poly={}
+ 	local _poly,x,y={},0,0
 	 for i=1,#poly do
 	  add(_poly,vrtx[poly[i]])
+	  x+=vrtx[poly[i]][1]
+	  y+=vrtx[poly[i]][2]
 	 end
   --color and dither
 	 if render==r_flat then
@@ -1185,6 +1191,8 @@ function draw_polys(vispolys,vrtx)
 	 else
    draw_wire(_poly)
 	 end
+	 -- debug zsort
+  --print(objpoly.key,x/#poly,y/#poly,7)
  end
  fillp()
 end
@@ -1409,7 +1417,7 @@ end
 
 -- triplefox with ciura's sequence
 -- https://www.lexaloffle.com/bbs/?tid=2477
-local shell_gaps={701,301,132,57,23,10,4,1} 
+--[[local shell_gaps={701,301,132,57,23,10,4,1} 
 function shellsort(a)
  for gap in all(shell_gaps) do
   if gap<=#a then
@@ -1426,51 +1434,50 @@ function shellsort(a)
   end
  end
 end
-
+]]--
 -- morgan3d
 -- https://www.lexaloffle.com/bbs/?tid=2477
---function heap_sort(data)
--- local n=#data
---
--- for i=flr(n/2)+1,1,-1 do
---  local parent,value,m=i,data[i],i+i
---  local key=value.key 
---
---  while m<=n do
---   if ((m<n) and (data[m+1].key>data[m].key)) m+=1
---   local mval=data[m]
---   if (key>mval.key) break
---   data[parent]=mval
---   parent=m
---   m+=m
---  end
---  data[parent]=value
--- end 
---
--- for i=n,2,-1 do
---  local value = data[i]
---  data[i],data[1]=data[1],value
---
---  local parent,terminate,m=1,i-1,2
---  local key=value.key 
---
---  while m<=terminate do
---   local mval=data[m]
---   local mkey=mval.key
---   if (m<terminate) and (data[m+1].key>mkey) then
---    m+=1
---    mval=data[m]
---    mkey=mval.key
---   end
---   if (key>mkey) break
---   data[parent]=mval
---   parent=m
---   m+=m
---  end  
---
---  data[parent]=value
--- end
---end
+function heap_sort(data)
+ local n=#data
+
+ for i=flr(n/2)+1,1,-1 do
+  local parent,value,m=i,data[i],i+i
+  local key=value.key 
+
+  while m<=n do
+   if ((m<n) and (data[m+1].key>data[m].key)) m+=1
+   local mval=data[m]
+   if (key>mval.key) break
+   data[parent]=mval
+   parent=m
+   m+=m
+  end
+  data[parent]=value
+ end 
+
+ for i=n,2,-1 do
+  local value = data[i]
+  data[i],data[1]=data[1],value
+
+  local parent,terminate,m=1,i-1,2
+  local key=value.key 
+  while m<=terminate do
+   local mval=data[m]
+   local mkey=mval.key
+   if (m<terminate) and (data[m+1].key>mkey) then
+    m+=1
+    mval=data[m]
+    mkey=mval.key
+   end
+   if (key>mkey) break
+   data[parent]=mval
+   parent=m
+   m+=m
+  end  
+
+  data[parent]=value
+ end
+end
 
 -->8
 --3d models
