@@ -1033,27 +1033,23 @@ function draw_cam(cam)
    draw_visible_vrtx(pnormals,v_vwcnt,8)
    if toolname==ed_face then
     draw_newface(vrtx)
+   elseif toolname==ed_node then
+    draw_newnode(vrtx,pnormals)
    end
   end
  else 
   -- 2d wire rendering
   vrtx=cam:proj(vrtx)
   cam.p_vrtx=vrtx
-	 for poly in all(mdl.polys) do
-	  -- convert poly with vrtx idx
-	  -- to poly with vrtx coord
-	  local _poly={}
-	  for i=1,#poly-1 do
-	   _poly[i]=vrtx[poly[i]]
-	  end
-	  draw_wire(_poly)
-	 end
+  draw_polys_wire(vrtx,mdl.polys)
   draw_selected_vrtx(vrtx)
   -- draw all vertex
   draw_points(vrtx,5)
   cam:draworig()
   if toolname==ed_face then
    draw_newface(vrtx)
+  elseif toolname==ed_node then
+   draw_newnode(vrtx)
   end
  end
  --
@@ -1072,6 +1068,32 @@ function draw_newface(vrtx)
   local v=vrtx[newelt[i]] 
   line(lv[1],lv[2],v[1],v[2],11)
   lv=v
+ end
+end
+
+function draw_newnode(vrtx,pfacecnt)
+ if (not newelt) return
+ local polys,mdlpolys,cnts=
+  {},mdl.polys,{}
+ 
+ for i=1,#newelt do
+  add(polys,mdlpolys[newelt[i]])
+  if (pfacecnt)  add(cnts, pfacecnt[newelt[i]])
+ end
+ draw_polys_wire(vrtx,polys,11)
+ draw_points(cnts,11)
+end
+
+function draw_polys_wire(vrtx,polys,col)
+ col=col or 6
+ for poly in all(polys) do
+  -- convert poly with vrtx idx
+  -- to poly with vrtx coord
+  local _poly={}
+  for i=1,#poly-1 do
+   _poly[i]=vrtx[poly[i]]
+  end
+  draw_wire(_poly,col)
  end
 end
 
@@ -1109,11 +1131,11 @@ function isvrtxvisible(v_view,iv)
   or v_view[iv][3]>0
 end
 --_poly=polygon with vertx coord
-function draw_wire(_poly)
+function draw_wire(_poly,col)
  local v1,v2=_poly[#_poly]
  for v in all(_poly) do
   v2,v1=v1,v
-  line(v1[1],v1[2],v2[1],v2[2],6)
+  line(v1[1],v1[2],v2[1],v2[2],col)
  end
 end
 
@@ -1189,7 +1211,7 @@ function draw_polys(vispolys,vrtx)
    fillp(dith2[ptn\1])
    polyfill(_poly,col)
 	 else
-   draw_wire(_poly)
+   draw_wire(_poly,6)
 	 end
 	 -- debug zsort
   --print(objpoly.key,x/#poly,y/#poly,7)
