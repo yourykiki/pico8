@@ -21,8 +21,10 @@ local c_top,c_side,c_front,c_3d,
  newelt,selnode
 local top,sid,fro,normals,
  normcnt,lastcol,mdlstate,
- istate,rotcapt=
- {1,3},{1,2},{3,2},{},{},84,{},0
+ istate,rotcapt,poly2node=
+ {1,3},{1,2},{3,2},{},
+ {},84,{},
+ 0,false,{}
 local v_up={0,1,0}
 
 --0 no selection
@@ -249,7 +251,11 @@ function init_cam(name,vx,vy,ax)
    selface=_selface
   end,
   selectnode=function(self)
-   --todo
+   -- todo
+   -- node or face handle ?
+   -- node = add node center
+   -- face = select face center
+   --  then find matching node
   end,
   vinsel=function(self,v)
    local sel,vx,vy=self.sel,
@@ -1034,7 +1040,7 @@ function draw_cam(cam)
    if toolname==ed_face then
     draw_newface(vrtx)
    elseif toolname==ed_node then
-    draw_newnode(vrtx,pnormals)
+    draw_newnode(vrtx,newelt,11,pnormals)
    end
   end
  else 
@@ -1049,7 +1055,7 @@ function draw_cam(cam)
   if toolname==ed_face then
    draw_newface(vrtx)
   elseif toolname==ed_node then
-   draw_newnode(vrtx)
+   draw_newnode(vrtx,newelt,11)
   end
  end
  --
@@ -1071,17 +1077,17 @@ function draw_newface(vrtx)
  end
 end
 
-function draw_newnode(vrtx,pfacecnt)
- if (not newelt) return
+-- todo try to delete this method
+-- because no clipping
+function draw_newnode(vrtx,ipolys,col,pfacecnt)
+ if (not ipolys) return
  local polys,mdlpolys,cnts=
   {},mdl.polys,{}
  
- for i=1,#newelt do
-  add(polys,mdlpolys[newelt[i]])
-  if (pfacecnt)  add(cnts, pfacecnt[newelt[i]])
+ for i=1,#ipolys do
+  if (pfacecnt)  add(cnts, pfacecnt[ipolys[i]])
  end
- draw_polys_wire(vrtx,polys,11)
- draw_points(cnts,11)
+ draw_points(cnts,col)
 end
 
 function draw_polys_wire(vrtx,polys,col)
@@ -1141,6 +1147,7 @@ end
 
 function cullnclip(v_wrld,v_view)
  local vispolys={}
+
  -- check visibility
  for k,poly in pairs(mdl.polys) do
   local norm=normals[k]
@@ -1160,20 +1167,16 @@ function cullnclip(v_wrld,v_view)
     {0,0,1},v_view,polyidx)
    -- final polygon to render
    if tc then
-	   local z,y,n=0,0,#tc --*#tc
+	   local z=0
 	   for iv in all(tc) do
 	    z=max(z,v_view[iv][3])
-	    --y=min(y,v_view[iv][2])
-	    --y=y+v_view[iv][2]+16
-	    --z+=v_view[iv][3]
 	   end
 	   add(vispolys,{
 	    poly=tc,
 	    col=poly[#poly],
 	    idx=k,
-	    --key=y+10
 	    key=1/z --maxz
-	    --key=n/z
+--todo add a prop for node rendering
 	   })
 	  end
   end
@@ -1182,6 +1185,9 @@ function cullnclip(v_wrld,v_view)
 end
 
 function draw_polys(vispolys,vrtx)
+ 
+ local hiwirepolys,newwirepolys=
+  {},{}
 
  -- sorting visible poly
  --shellsort(vispolys)
@@ -1194,29 +1200,42 @@ function draw_polys(vispolys,vrtx)
  for objpoly in all(vispolys) do
 -- for j=#vispolys,1,-1 do
 --  local objpoly=vispolys[j]
- 	local poly,idx,col=
- 	 objpoly.poly,
- 	 objpoly.idx,
- 	 objpoly.col
- 	local _poly,x,y={},0,0
-	 for i=1,#poly do
-	  add(_poly,vrtx[poly[i]])
-	  x+=vrtx[poly[i]][1]
-	  y+=vrtx[poly[i]][2]
-	 end
+  local poly,idx,col=
+   objpoly.poly,
+   objpoly.idx,
+   objpoly.col
+  local _poly,x,y={},0,0
+  for i=1,#poly do
+   add(_poly,vrtx[poly[i]])
+   x+=vrtx[poly[i]][1]
+   y+=vrtx[poly[i]][2]
+  end
   --color and dither
-	 if render==r_flat then
+  if render==r_flat then
    local ptn=v_dot(normals[idx],lgt)
    ptn=(ptn*8+8)\1
    fillp(dith2[ptn\1])
    polyfill(_poly,col)
-	 else
+  else
    draw_wire(_poly,6)
-	 end
-	 -- debug zsort
+  end
+  if ed_tool.name==ed_node then
+   if inarray(newelt,idx) then
+    add(newwirepolys,_poly)
+   elseif poly2node[idx]~=nil then
+    add(hiwirepolys,_poly)
+   end
+  end
+  -- debug zsort
   --print(objpoly.key,x/#poly,y/#poly,7)
  end
  fillp()
+ for _poly in all(hiwirepolys) do
+  draw_wire(_poly,13)
+ end
+ for _poly in all(newwirepolys) do
+  draw_wire(_poly,11)
+ end
 end
 
 function draw_points(vrtx,col)
@@ -1461,7 +1480,7 @@ end
 -- https://www.lexaloffle.com/bbs/?tid=2477
 function heap_sort(data)
  local n=#data
-
+if (n==0) return
  for i=flr(n/2)+1,1,-1 do
   local parent,value,m=i,data[i],i+i
   local key=value.key 
@@ -1569,6 +1588,12 @@ function add_all(a,b)
  for x in all(b) do
   add(a,x)
  end
+end
+function inarray(array,val)
+ for v in all(array) do
+  if (v==val) return true
+ end
+ return false
 end
 function lerp(v0,v1,prc)
  return (1-prc)*v0+prc*v1
@@ -1882,6 +1907,9 @@ function add_node()
  local nodes,node=mdl.nodes,
   {polys=newelt,conn={}}
  add(nodes,node)
+ for elt in all(newelt) do
+  poly2node[elt]=#nodes
+ end
  newelt=nil
 end
 
@@ -1924,6 +1952,7 @@ function import()
 --export(_mdl)
  mdl=_mdl
  pushmodel(mdl)
+ poly2node={}
 end
 
 -- import 
