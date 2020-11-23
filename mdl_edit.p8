@@ -1040,7 +1040,13 @@ function draw_cam(cam)
    if toolname==ed_face then
     draw_newface(vrtx)
    elseif toolname==ed_node then
-    draw_newnode(vrtx,newelt,11,pnormals)
+    if newelt then
+     draw_visible_vrtx(
+      pnormals,v_vwcnt,11,
+      newelt,inarray)
+    end
+    draw_visible_vrtx(
+     pnormals,v_vwcnt,13,poly2node,inkey)
    end
   end
  else 
@@ -1054,8 +1060,6 @@ function draw_cam(cam)
   cam:draworig()
   if toolname==ed_face then
    draw_newface(vrtx)
-  elseif toolname==ed_node then
-   draw_newnode(vrtx,newelt,11)
   end
  end
  --
@@ -1075,19 +1079,6 @@ function draw_newface(vrtx)
   line(lv[1],lv[2],v[1],v[2],11)
   lv=v
  end
-end
-
--- todo try to delete this method
--- because no clipping
-function draw_newnode(vrtx,ipolys,col,pfacecnt)
- if (not ipolys) return
- local polys,mdlpolys,cnts=
-  {},mdl.polys,{}
- 
- for i=1,#ipolys do
-  if (pfacecnt)  add(cnts, pfacecnt[ipolys[i]])
- end
- draw_points(cnts,col)
 end
 
 function draw_polys_wire(vrtx,polys,col)
@@ -1122,11 +1113,16 @@ function draw_selected_vrtx(vrtx,v_view)
  end
 end
 
-function draw_visible_vrtx(vrtx,v_view,col)
+function draw_visible_vrtx(vrtx,v_view,col,filter,fun)
  -- draw all vertex
- local visvrtx={}
+ local visvrtx,filtered=
+  {},filter~=nil
  for k,v in pairs(vrtx) do
-  if isvrtxvisible(v_view,k) then
+  if isvrtxvisible(v_view,k) 
+   and (not filtered
+    or fun(filter,k)
+    --or filter[k]~=nil
+    ) then
    add(visvrtx,v)
   end
  end
@@ -1155,8 +1151,15 @@ function cullnclip(v_wrld,v_view)
   v_add(vp,c_3d.pos,-1)
 
   -- backface culling
-  if v_dot(norm,vp)<0
-   or render==r_wire then
+  local back,wire,newnod,nod=
+   v_dot(norm,vp)<0,
+   render==r_wire,
+   ed_tool.name==ed_node 
+    and inarray(newelt,k),
+   ed_tool.name==ed_node
+    and poly2node[k]~=nil
+     
+  if back or wire or newnod or nod then
    -- clipping
    local polyidx={}
    for i=1,#poly-1 do
@@ -1175,8 +1178,10 @@ function cullnclip(v_wrld,v_view)
 	    poly=tc,
 	    col=poly[#poly],
 	    idx=k,
-	    key=1/z --maxz
---todo add a prop for node rendering
+	    key=1/z, --maxz
+	    vis=back,
+	    newnod=newnod,
+	    nod=nod
 	   })
 	  end
   end
@@ -1211,7 +1216,7 @@ function draw_polys(vispolys,vrtx)
    y+=vrtx[poly[i]][2]
   end
   --color and dither
-  if render==r_flat then
+  if render==r_flat and objpoly.vis then
    local ptn=v_dot(normals[idx],lgt)
    ptn=(ptn*8+8)\1
    fillp(dith2[ptn\1])
@@ -1219,12 +1224,10 @@ function draw_polys(vispolys,vrtx)
   else
    draw_wire(_poly,6)
   end
-  if ed_tool.name==ed_node then
-   if inarray(newelt,idx) then
-    add(newwirepolys,_poly)
-   elseif poly2node[idx]~=nil then
-    add(hiwirepolys,_poly)
-   end
+  if objpoly.newnod then
+   add(newwirepolys,_poly)
+  elseif objpoly.nod then
+   add(hiwirepolys,_poly)
   end
   -- debug zsort
   --print(objpoly.key,x/#poly,y/#poly,7)
@@ -1594,6 +1597,9 @@ function inarray(array,val)
   if (v==val) return true
  end
  return false
+end
+function inkey(array,k)
+ return array[k]~=nil 
 end
 function lerp(v0,v1,prc)
  return (1-prc)*v0+prc*v1
