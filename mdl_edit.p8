@@ -131,7 +131,25 @@ function getendmnu(lbl)
   }
  }
 end
-
+local delnodmnu={
+ { caption="delete nodes",
+   onclick=function()
+    --todo
+--    del_vrtx(ivrtx,mdl)
+--    ivrtx={}
+--    inearvrtx=nil
+--    updstate=us_noselect
+--    pushmodel(mdl)
+   end
+ },
+ { caption="link nodes",
+   onclick=function()
+    --todo
+--    duplicate(ivrtx)
+--    pushmodel(mdl)
+   end
+ }
+}
 function _init()
  -- devkit mode
  poke(0x5f2d, 1)
@@ -222,40 +240,29 @@ function init_cam(name,vx,vy,ax)
    self.sel.a=false
    self:sortsel()
   end,
-  selectvrtx=function(self)
-   local selvrtx,sel={},self.sel
-   if sel.x1==sel.x2 and
-      sel.y1==sel.y2 then
-    ivrtx={inearvrtx}
-    return
-   end
-   for k,v in pairs(self.p_vrtx) do
-    if self:vinsel(v) then
-     add(selvrtx,k)
-    end
-   end
-   ivrtx=selvrtx
-  end,
-  selectface=function(self)
-   local _selface,sel={},self.sel
-   if sel.x1==sel.x2 and
-      sel.y1==sel.y2 then
-    selface={inearnormal}
-    return
-   end
-   for k,v in pairs(self.p_normcnt) do
-    if self:vinsel(v) then
-     add(_selface,k)
-    end
-   end
-   selface=_selface
-  end,
   selectnode=function(self)
-   -- todo
-   -- node or face handle ?
-   -- node = add node center
-   -- face = select face center
-   --  then find matching node
+   local _selface=self:selectelt(
+    inearnormal,self.p_normcnt)
+   selnode={}
+   for iface in all(_selface) do
+    local nod=poly2node[iface] 
+    if not inarray(selnode,nod)then
+     add(selnode,nod)
+    end
+   end
+  end,
+  selectelt=function(self,inearelt,listelt)
+   local _selelt,sel={},self.sel
+   if sel.x1==sel.x2 and
+      sel.y1==sel.y2 then
+    return {inearelt}
+   end
+   for k,v in pairs(listelt) do
+    if self:vinsel(v) then
+     add(_selelt,k)
+    end
+   end
+   return _selelt
   end,
   vinsel=function(self,v)
    local sel,vx,vy=self.sel,
@@ -286,6 +293,7 @@ function init_cam(name,vx,vy,ax)
    end
   end,
   movedragselvrtx=function(self,dx,dy,vrtx)
+   if (not ax) return
    for i in all(ivrtx) do
     vrtx[i][ax[1]]+=dx
     vrtx[i][ax[2]]-=dy
@@ -764,8 +772,8 @@ function update_vrtx(mx,my,mb,dw)
   if mb&1==0 then
    -- store mx,my end
    c_current:endselect()
-   c_current:selectvrtx()
-
+   ivrtx=c_current:selectelt(
+    inearvrtx,c_current.p_vrtx)
    -- check if vrtx selected
    if #ivrtx>0 then
     updstate=us_edit
@@ -857,8 +865,8 @@ function update_face(mx,my,mb,dw)
   if mb&1==0 then
    -- store mx,my end
    c_current:endselect()
-   c_current:selectface()
-
+   selface=c_current:selectelt(
+    inearnormal,c_current.p_normcnt)
    -- check if face selected
 	  if selface and #selface>0 then
 	   updstate=us_edit
@@ -906,7 +914,8 @@ function update_node(mx,my,mb,dw)
  
  if updstate==us_noselect then
   update_focus(mx,my)
-
+  c_current:near_normals(mx,my)
+ 
   if mb&1==1 then
    -- store mx,my start
    c_current:startselect(mx,my)
@@ -924,6 +933,7 @@ function update_node(mx,my,mb,dw)
    -- check if node selected
 	  if selnode and #selnode>0 then
 	   updstate=us_edit
+	   sfx(0)
 	  else
     updstate=us_noselect
    end
@@ -932,6 +942,8 @@ function update_node(mx,my,mb,dw)
   update_focus(mx,my)
   if m_pressed(mb,1) then
    updstate=us_noselect
+  elseif m_pressed(mb,2) and not ctx_mnu then
+   ctx_mnu=init_context_mnu(mx,my,delnodmnu)
   end
  elseif updstate==us_add then
   --near face
@@ -1689,14 +1701,14 @@ end
 
 function add_prism(nface,cam)
  local lvrtx,lpolys,face,
-  top,bot,lcol,md=
+  top,bot,lcol,md,ax=
   {},{},{},{},{},lastcol,
-  nface*2
+  nface*2,cam.ax or c_front.ax
  for i=1,nface do
   local x,z=
    ( 6*cos(i/nface+1/md)+0.5)\1,
    (-6*sin(i/nface+1/md)+0.5)\1
-  addvrtx(lvrtx,cam.ax,x,z)
+  addvrtx(lvrtx,ax,x,z)
   add(bot,i*2)
   add(top,(nface+1-i)*2-1)
  end
