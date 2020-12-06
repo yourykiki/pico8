@@ -10,7 +10,6 @@ __lua__
 -- c_3d on a sphere look at 0,0,0
 -- or moving camera
 -- token war ----------------
--- models init from string
 -- ed tools refactor
 
 local c_top,c_side,c_front,c_3d,
@@ -1341,14 +1340,14 @@ local m4ident=
   0,0,1,0, 
   0,0,0,1}
 
-function m_makerotx(a)
+--[[function m_makerotx(a)
  return {
   1,0,     0,       0,
   0,cos(a),-sin(a), 0,
   0,sin(a),cos(a),  0,
   0,0,     0,       1 
  }
-end
+end]]--
 function m_makeroty(a)
  return {
   cos(a),0,-sin(a), 0,
@@ -1357,14 +1356,14 @@ function m_makeroty(a)
   0,     0,0,       1 
  }
 end
-function m_makerotz(a)
+--[[function m_makerotz(a)
  return {
   cos(a),-sin(a),0,0,
   sin(a),cos(a),0,0,
   0,     0,     1,0,
   0,     0,     0,1
  }
-end
+end]]--
 function m_maketran(x,y,z)
  return {
   1,0,0,0,
@@ -1396,7 +1395,7 @@ return {
 }
 end
 
-function transform(lvrtx,px,py,pz,roty)
+--[[function transform(lvrtx,px,py,pz,roty)
  local m_roty,m_tran=
   m_makeroty(roty),
   m_maketran(px,py,pz)
@@ -1407,7 +1406,7 @@ function transform(lvrtx,px,py,pz,roty)
  for i,v in pairs(lvrtx) do
   lvrtx[i]=m_x_v(m_wrld,v)
  end
-end
+end]]--
 --
 function v_cross(a,b)
  local ax,ay,az=a[1],a[2],a[3]
@@ -1572,44 +1571,13 @@ end
 local col1=0x54
  
 function make_cube(pos,ry)
- local lvrtx={
-  {-8,0,-4},{-6,8,-4},
-  {6,8,-4},{8,0,-4},
-  {8,0,4},{6,8,4},
-  {-6,8,4},{-8,0,4},
- }
- local lpolys={
-  {1,2,3,4,col1},
-  {5,6,7,8,col1},
-  {8,7,2,1,col1},
-  {4,3,6,5,col1},
-  {7,6,3,2,col1},
-  {4,5,8,1,col1},
- }
-
- transform(lvrtx,
-  pos[1],pos[2],pos[3],ry)
-
- local lwalls={}
- 
- return {
-  vrtx=lvrtx,
-  polys=lpolys,
-  walls=lwalls,
-  nodes={}
- }
+ local mdlstr="{polys={{1,2,3,4,84},{5,6,7,8,84},{8,7,2,1,84},{4,3,6,5,84},{7,6,3,2,84},{4,5,8,1,84}},walls={},vrtx={{-8,0,-4},{-6,8,-4},{6,8,-4},{8,0,-4},{8,0,4},{6,8,4},{-6,8,4},{-8,0,4}},nodes={}}"
+ return tbl_parse(mdlstr)
 end
 
 function make_marker()
- return {
-  vrtx={
-   {0,0,0},{10,0,0},
-   {0,10,0},{0,0,10}
-  },
-  lins={
-   {1,2},{1,3},{1,4}
-  }
- }
+ local mdlstr="{vrtx={{0,0,0},{10,0,0},{0,10,0},{0,0,10}},lins={{1,2},{1,3},{1,4}}}"
+ return tbl_parse(mdlstr)
 end
 
 function init_norm(_vrtx,_poly)
