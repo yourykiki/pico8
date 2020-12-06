@@ -5,14 +5,13 @@ __lua__
 -- @yourykiki
 
 -- rotate selection ?
--- draw grid matching temple rooms size
--- node tool
+-- draw grid
 
 -- c_3d on a sphere look at 0,0,0
 -- or moving camera
 -- token war ----------------
--- local view=c_3d.view
--- view.tw,view.th=64,60 
+-- models init from string
+-- ed tools refactor
 
 local c_top,c_side,c_front,c_3d,
  mdl,mrk_mdl,c_current,ivrtx,
@@ -21,10 +20,12 @@ local c_top,c_side,c_front,c_3d,
  newelt,selnode
 local top,sid,fro,normals,
  normcnt,lastcol,mdlstate,
- istate,rotcapt,poly2node=
+ istate,rotcapt,poly2node,
+ dtw,dth=
  {1,3},{1,2},{3,2},{},
  {},84,{},
- 0,false,{}
+ 0,false,{},
+ 64,60
 local v_up={0,1,0}
 
 --0 no selection
@@ -36,7 +37,8 @@ local updstate,
  us_noselect,
  us_select,
  us_edit,
- us_add=0,0,1,2,3
+ us_add,
+ us_link=0,0,1,2,3,4
 
 local mousemode,
  mm_point,
@@ -110,7 +112,9 @@ function getaddmnu(lbl)
 end
 function getendmnu(lbl)
  local add_elt
- if lbl=="face" then
+ if lbl=="link" then
+  add_elt=function()end
+ elseif lbl=="face" then
   add_elt=add_face
  else
   add_elt=add_node
@@ -126,6 +130,8 @@ function getendmnu(lbl)
   { caption="cancel",
     onclick=function()
      newelt=nil
+     --restore last mdl state
+     mdl=pop_model(0)
      updstate=us_noselect
     end
   }
@@ -134,19 +140,14 @@ end
 local delnodmnu={
  { caption="delete nodes",
    onclick=function()
-    --todo
---    del_vrtx(ivrtx,mdl)
---    ivrtx={}
---    inearvrtx=nil
---    updstate=us_noselect
---    pushmodel(mdl)
+    del_node()
+    --selnode=nil--seems useless
+    pushmodel(mdl)
    end
  },
  { caption="link nodes",
    onclick=function()
-    --todo
---    duplicate(ivrtx)
---    pushmodel(mdl)
+    updstate=us_link
    end
  }
 }
@@ -243,13 +244,14 @@ function init_cam(name,vx,vy,ax)
   selectnode=function(self)
    local _selface=self:selectelt(
     inearnormal,self.p_normcnt)
-   selnode={}
+   local _selnode={}
    for iface in all(_selface) do
     local nod=poly2node[iface] 
-    if not inarray(selnode,nod)then
-     add(selnode,nod)
+    if not inarray(_selnode,nod)then
+     add(_selnode,nod)
     end
    end
+   return _selnode
   end,
   selectelt=function(self,inearelt,listelt)
    local _selelt,sel={},self.sel
@@ -382,6 +384,7 @@ function init_toolbar()
     onclick=function()
      if #mdlstate>1 then
       mdl=pop_model()
+      refreshpoly2node()
       reset_tool()
      end
     end,
@@ -393,6 +396,7 @@ function init_toolbar()
     onclick=function()
      if istate<#mdlstate then
       mdl=pop_model(1)
+      refreshpoly2node()
       reset_tool()
      end
     end,
@@ -403,9 +407,7 @@ function init_toolbar()
    noop,
    {icon=3,
     onclick=function()
-     ed_tool.name=ed_vrtx
-     ed_tool.update=update_vrtx
-     reset_tool()
+     selecttool(ed_vrtx,update_vrtx)
     end,
     tgl=function()
      return ed_tool.name==ed_vrtx
@@ -413,8 +415,7 @@ function init_toolbar()
    }, 
    {icon=4,
     onclick=function()
-     ed_tool.name=ed_face
-     ed_tool.update=update_face
+     selecttool(ed_face,update_face)
      reset_tool()
     end,
     tgl=function()
@@ -423,9 +424,7 @@ function init_toolbar()
    },
    {icon=12,
     onclick=function()
-     ed_tool.name=ed_node
-     ed_tool.update=update_node
-     reset_tool()
+     selecttool(ed_node,update_node)
     end,
     tgl=function()
      return ed_tool.name==ed_node
@@ -433,9 +432,7 @@ function init_toolbar()
    },
    {icon=5,
     onclick=function()
-     ed_tool.name=ed_capt
-     ed_tool.update=update_capt
-     reset_tool()
+     selecttool(ed_capt,update_capt)
     end,
     tgl=function()
      return ed_tool.name==ed_capt
@@ -466,6 +463,18 @@ function init_toolbar()
     tgl=function()
      return rotcapt
     end
+   },
+   {icon=13,
+    onclick=function()
+     if dtw==64 then
+      dtw,dth=129,121
+     else
+      dtw,dth=64,60
+     end
+    end,
+    tgl=function()
+     return dtw==129
+    end
    }
   },
   update=update_actions,
@@ -479,6 +488,11 @@ function init_toolbar()
  }
 end
 
+function selecttool(name,fun)
+ ed_tool.name=name
+ ed_tool.update=fun
+ reset_tool()
+end
 function init_context_mnu(mx,my,mnu_items)
  local max_l,nb_item=0,#mnu_items
  for item in all(mnu_items) do
@@ -653,6 +667,10 @@ function update(mx,my,mb,dw)
   end
  end
 
+ -- 3d cam size
+ local view=c_3d.view
+ view.tw,view.th=dtw,dth
+ -- handle edition tool
  ed_tool.update(mx,my,mb,dw)
  update_normals(mdl)
  
@@ -747,8 +765,6 @@ end
 
 
 function update_vrtx(mx,my,mb,dw)
- local view=c_3d.view
- view.tw,view.th=64,60
  -- btn state
  local bl,br,bu,bd=
    btn(⬅️),btn(➡️),
@@ -830,9 +846,6 @@ function update_vrtx(mx,my,mb,dw)
 end
 
 function update_face(mx,my,mb,dw)
- local view=c_3d.view
- view.tw,view.th=64,60
-
  --
  if (c_current) c_current:near_normals(mx,my)
 	
@@ -903,15 +916,10 @@ end
 function update_capt(mx,my,mb,dw)
  update_focus(mx,my)
  if (rotcapt) c_3d.ang+=0.005
- 
- local view=c_3d.view
- view.tw,view.th=129,121
 end
 
 function update_node(mx,my,mb,dw)
- local view=c_3d.view
- view.tw,view.th=64,60
- 
+
  if updstate==us_noselect then
   update_focus(mx,my)
   c_current:near_normals(mx,my)
@@ -928,13 +936,12 @@ function update_node(mx,my,mb,dw)
   if mb&1==0 then
    -- store mx,my end
    c_current:endselect()
-   c_current:selectnode()
+   selnode=c_current:selectnode()
 
    -- check if node selected
-	  if selnode and #selnode>0 then
-	   updstate=us_edit
-	   sfx(0)
-	  else
+   if selnode and #selnode>0 then
+    updstate=us_edit
+   else
     updstate=us_noselect
    end
   end
@@ -944,6 +951,20 @@ function update_node(mx,my,mb,dw)
    updstate=us_noselect
   elseif m_pressed(mb,2) and not ctx_mnu then
    ctx_mnu=init_context_mnu(mx,my,delnodmnu)
+  end
+ elseif updstate==us_link then
+  c_current:near_normals(mx,my)
+  if m_pressed(mb,1) then
+   --toggle link
+   c_current:startselect(mx,my)
+--   c_current:endselect()
+   local n=c_current:selectnode()
+   if #n>0 then
+    link_nodes(selnode[1],n[1])
+   end
+  elseif m_pressed(mb,2) and not ctx_mnu then
+   ctx_mnu=init_context_mnu(mx,my,
+    getendmnu"link")
   end
  elseif updstate==us_add then
   --near face
@@ -1132,9 +1153,7 @@ function draw_visible_vrtx(vrtx,v_view,col,filter,fun)
  for k,v in pairs(vrtx) do
   if isvrtxvisible(v_view,k) 
    and (not filtered
-    or fun(filter,k)
-    --or filter[k]~=nil
-    ) then
+        or fun(filter,k)) then
    add(visvrtx,v)
   end
  end
@@ -1163,13 +1182,26 @@ function cullnclip(v_wrld,v_view)
   v_add(vp,c_3d.pos,-1)
 
   -- backface culling
-  local back,wire,newnod,nod=
+  local back,wire,nod=
    v_dot(norm,vp)<0,
-   render==r_wire,
-   ed_tool.name==ed_node 
-    and inarray(newelt,k),
-   ed_tool.name==ed_node
-    and poly2node[k]~=nil
+   render==r_wire,0
+   
+  if ed_tool.name==ed_node then
+   local p2nk,nodes=
+    poly2node[k],
+    mdl.nodes
+   -- new node
+   if (inarray(newelt,k)) nod=4
+   -- in a node
+   if (p2nk~=nil) nod=1
+   -- selected node
+   if (inarray(selnode,p2nk))nod=3
+   -- adjacent nodes
+   if selnode and nodes[selnode[1]] and
+    inarray(nodes[selnode[1]].conn,p2nk) then
+    nod=2
+   end
+  end
      
   if back or wire or newnod or nod then
    -- clipping
@@ -1182,20 +1214,19 @@ function cullnclip(v_wrld,v_view)
     {0,0,1},v_view,polyidx)
    -- final polygon to render
    if tc then
-	   local z=0
-	   for iv in all(tc) do
-	    z=max(z,v_view[iv][3])
-	   end
-	   add(vispolys,{
-	    poly=tc,
-	    col=poly[#poly],
-	    idx=k,
-	    key=1/z, --maxz
-	    vis=back,
-	    newnod=newnod,
-	    nod=nod
-	   })
-	  end
+    local z=0
+    for iv in all(tc) do
+     z=max(z,v_view[iv][3])
+    end
+    add(vispolys,{
+     poly=tc,
+     col=poly[#poly],
+     idx=k,
+     key=1/z, --maxz
+     vis=back,
+     nod=nod
+    })
+   end
   end
  end
  return vispolys
@@ -1203,8 +1234,9 @@ end
 
 function draw_polys(vispolys,vrtx)
  
- local hiwirepolys,newwirepolys=
-  {},{}
+ local wirepolys,nodetool=
+  {{},{},{},{}},
+  ed_tool.name==ed_node
 
  -- sorting visible poly
  --shellsort(vispolys)
@@ -1233,23 +1265,23 @@ function draw_polys(vispolys,vrtx)
    ptn=(ptn*8+8)\1
    fillp(dith2[ptn\1])
    polyfill(_poly,col)
-  else
+  end
+  if render==r_wire then
    draw_wire(_poly,6)
   end
-  if objpoly.newnod then
-   add(newwirepolys,_poly)
-  elseif objpoly.nod then
-   add(hiwirepolys,_poly)
-  end
+
+  add(wirepolys[objpoly.nod],_poly)
   -- debug zsort
   --print(objpoly.key,x/#poly,y/#poly,7)
  end
  fillp()
- for _poly in all(hiwirepolys) do
-  draw_wire(_poly,13)
- end
- for _poly in all(newwirepolys) do
-  draw_wire(_poly,11)
+ -- additional node tool infos
+-- if (not nodetool) return
+ local pcol={13,4,3,11}
+ for i,col in pairs(pcol) do
+  for _poly in all(wirepolys[i]) do
+   draw_wire(_poly,col)
+  end
  end
 end
 
@@ -1925,12 +1957,36 @@ function add_node()
  local nodes,node=mdl.nodes,
   {polys=newelt,conn={}}
  add(nodes,node)
- for elt in all(newelt) do
-  poly2node[elt]=#nodes
- end
+-- for elt in all(newelt) do
+--  poly2node[elt]=#nodes
+-- end
  newelt=nil
+ refreshpoly2node()
 end
-
+function del_node()
+ for node in all(selnode) do
+--  for k,p2n in pairs(poly2node) do
+--   if p2n==node then
+--    poly2node[k]=nil
+--   end
+--  end
+  mdl.nodes[node]=nil
+ end
+ refreshpoly2node()
+end
+function link_nodes(n1,n2)
+ if n1!=n2 then
+  togglelink(mdl.nodes[n1].conn,n2)
+  togglelink(mdl.nodes[n2].conn,n1)
+ end
+end
+function togglelink(conn,n)
+ if not inarray(conn,n) then
+  add(conn,n)
+ else
+  del(conn,n)
+ end
+end
 -->8
 -- export / import
 function export(mdl)
@@ -1970,7 +2026,17 @@ function import()
 --export(_mdl)
  mdl=_mdl
  pushmodel(mdl)
+ --
+ refreshpoly2node()
+end
+
+function refreshpoly2node()
  poly2node={}
+ for k,node in pairs(mdl.nodes) do
+  for ipol in all(node.polys) do
+   poly2node[ipol]=k
+  end
+ end
 end
 
 -- import 
@@ -2070,35 +2136,35 @@ function pushmodel(mdl)
 end
 
 function pop_model(z)
- z=z and 1 or -1
+ z=z or -1
  istate=max(1,istate+z)
  local str=mdlstate[istate]
  return tbl_parse(str)
 end
 __gfx__
 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-110000000006000000060000000d000005dddd500dddddd0000000000000dd500000dd500000dd0000dd00000ddd00000ddd0000000000000000000000000000
-161000000006000000666000000000000dd0d0d00d0000d00000000005dd00d005ddddd00d0d00d00d00d0d000dd0d000d5d0000000000000000000000000000
+110000000006000000060000000d000005dddd500dddddd0000000000000dd500000dd500000dd0000dd00000ddd00000ddd00000dd00dd00000000000000000
+161000000006000000666000000000000dd0d0d00d0000d00000000005dd00d005ddddd00d0d00d00d00d0d000dd0d000d5d00000d0000d00000000000000000
 1661000006666600066666000d050d000d0d0dd00d0000d0000000000d0000d00dddddd00dd000d00d000dd00d0d00d00dd50000000000000000000000000000
 166610000066600000060000000000000dd0d0d00d0000d0000000000d0000d00dddddd00ddd00d00d00ddd00d0000d000005dd0000000000000000000000000
-166661000006000000060000000d00000d0d0dd00d0000d0000000000d00dd500ddddd50000000d00d0000000d0000d00000d5d0000000000000000000000000
-1166100002222200022222000000000005dddd500dddddd00000000005dd000005dd000000dddd0000dddd0000dddd000000ddd0000000000000000000000000
+166661000006000000060000000d00000d0d0dd00d0000d0000000000d00dd500ddddd50000000d00d0000000d0000d00000d5d00d0000d00000000000000000
+1166100002222200022222000000000005dddd500dddddd00000000005dd000005dd000000dddd0000dddd0000dddd000000ddd00dd00dd00000000000000000
 00110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0006600000000000000000000000000005dddd500d0d0d000000000005dd000005dd00000000000000000000000000000000ddd0000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000dd0000dd0000000000000000
+0006600000000000000000000000000005dddd500d0d0d000000000005dd000005dd00000000000000000000000000000000ddd0d000000d0000000000000000
 006006000006000000060000000d00000d0d0dd0000000d0000000000d00dd500ddddd500000dd0000dd00000ddd00000000d5d0000000000000000000000000
 006006000006000000666000000000000dd0d0d00d000000000000000d0000d00dddddd00d0d00d00d00d0d000dd0d0000005dd0000000000000000000000000
 0006600006666600066666000d050d000d0d0dd0000000d0000000000d0000d00dddddd00dd000d00d000dd00d0d00d00dd50000000000000000000000000000
 000006000066600000060000000000000dd0d0d00d0000000000000005dd00d005ddddd00ddd00d00d00ddd00d0000d00d5d0000000000000000000000000000
-000000600222220002222200000d000005dddd5000d0d0d0000000000000dd500000dd5000dddd0000dddd0000dddd000ddd0000000000000000000000000000
+000000600222220002222200000d000005dddd5000d0d0d0000000000000dd500000dd5000dddd0000dddd0000dddd000ddd0000d000000d0000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000dd0000dd0000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-020002000080000000000000000f000005ffff500ffffff0000000000000ff500000ff500000ff0000ff00000fff00000fff0000000000000000000000000000
-222022200888880000000000000000000ff0f0f00f0000f00000000005ff00f005fffff00f0f00f00f00f0f000ff0f000f5f0000000000000000000000000000
+020002000080000000000000000f000005ffff500ffffff0000000000000ff500000ff500000ff0000ff00000fff00000fff00000ff00ff00000000000000000
+222022200888880000000000000000000ff0f0f00f0000f00000000005ff00f005fffff00f0f00f00f00f0f000ff0f000f5f00000f0000f00000000000000000
 0222220000800080000000000f050f000f0f0ff00f0000f0000000000f0000f00ffffff00ff000f00f000ff00f0f00f00ff50000000000000000000000000000
 002220000000000000000000000000000ff0f0f00f0000f0000000000f0000f00ffffff00fff00f00f00fff00f0000f000005ff0000000000000000000000000
-022222000200020000000000000f00000f0f0ff00f0000f0000000000f00ff500fffff50000000f00f0000000f0000f00000f5f0000000000000000000000000
-2220222000222220000000000000000005ffff500ffffff00000000005ff000005ff000000ffff0000ffff0000ffff000000fff0000000000000000000000000
+022222000200020000000000000f00000f0f0ff00f0000f0000000000f00ff500fffff50000000f00f0000000f0000f00000f5f00f0000f00000000000000000
+2220222000222220000000000000000005ffff500ffffff00000000005ff000005ff000000ffff0000ffff0000ffff000000fff00ff00ff00000000000000000
 02000200000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 08000800002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
