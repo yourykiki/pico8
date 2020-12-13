@@ -37,7 +37,8 @@ local updstate,
  us_select,
  us_edit,
  us_add,
- us_link=0,0,1,2,3,4
+ us_link,
+ us_child=0,0,1,2,3,4,5
 
 local mousemode,
  mm_point,
@@ -51,18 +52,6 @@ local ed_tool={name=ed_vrtx}
 local render,
  r_wire,
  r_flat=0,0,1
-local dith={
- 0x0000,0x8000,0x8020,0xa020,
- 0xa0a0,0xa4a0,0xa4a1,0xa5a1,
- 0xa5a5,0xe5a5,0xa5b5,0xf5b5,
- 0xf5f5,0xfdf5,0xfdf7,0xffff
-}
-local dith2={
- 0x0000,0x0000,0x8020,0xc020,
- 0xc060,0xc070,0xe070,0xe470,
- 0xe472,0xf472,0xf4f2,0xf5f2,
- 0xf5fa,0xf7fa,0xf7fe,0xffff
-}
 
 local addvol_mnu={
  { caption="add cube",
@@ -148,6 +137,11 @@ local delnodmnu={
    onclick=function()
     updstate=us_link
    end
+ },
+ { caption="add child",
+   onclick=function()
+    updstate=us_child
+   end
  }
 }
 function _init()
@@ -172,6 +166,9 @@ function _init()
  -- color picker
  colpick=init_col_picker()
  c_current=c_3d
+ --init dith ramp
+-- dith=tbl_parse("{0x0000,0x8000,0x8020,0xa020,0xa0a0,0xa4a0,0xa4a1,0xa5a1,0xa5a5,0xe5a5,0xa5b5,0xf5b5,0xf5f5,0xfdf5,0xfdf7,0xffff}")
+ dith2=tbl_parse("{0x0000,0x0000,0x8020,0xc020, 0xc060,0xc070,0xe070,0xe470, 0xe472,0xf472,0xf4f2,0xf5f2, 0xf5fa,0xf7fa,0xf7fe,0xffff}")
 end
 
 function init_cam(name,vx,vy,ax)
@@ -383,7 +380,7 @@ function init_toolbar()
     onclick=function()
      if #mdlstate>1 then
       mdl=pop_model()
-      refreshpoly2node()
+      refreshpolyinfo()
       reset_tool()
      end
     end,
@@ -395,7 +392,7 @@ function init_toolbar()
     onclick=function()
      if istate<#mdlstate then
       mdl=pop_model(1)
-      refreshpoly2node()
+      refreshpolyinfo()
       reset_tool()
      end
     end,
@@ -678,8 +675,8 @@ function update(mx,my,mb,dw)
   local ta,dy=0,0
   if (btn(⬅️)) ta=0.02
   if (btn(➡️)) ta=-0.02
-  if (btn(⬆️)) dy=-1
-  if (btn(⬇️)) dy=1
+  if (btn(⬆️)) dy=1
+  if (btn(⬇️)) dy=-1
   c_3d.vang=lerp(c_3d.vang,ta,0.6)
   move_3dcam(c_3d.vang,dy) 
  end
@@ -965,6 +962,19 @@ function update_node(mx,my,mb,dw)
    ctx_mnu=init_context_mnu(mx,my,
     getendmnu"link")
   end
+ elseif updstate==us_child then
+  c_current:near_normals(mx,my)
+  if m_pressed(mb,1) then
+   --toggle link
+   c_current:startselect(mx,my)
+   local n=c_current:selectnode()
+   if #n>0 then
+    link_child(selnode[1],n[1])
+   end
+  elseif m_pressed(mb,2) and not ctx_mnu then
+   ctx_mnu=init_context_mnu(mx,my,
+    getendmnu"link")
+  end
  elseif updstate==us_add then
   --near face
   c_current:near_normals(mx,my)
@@ -996,7 +1006,7 @@ function _draw()
   colpick:draw()
  end
  spr(0,stat(32)-1,stat(33)-1)
- --print("updstate "..updstate,0,12,7)
+ --if (curinod) print("curinod "..curinod,0,12,7)
 end
 
 function draw_cam(cam)
@@ -1044,17 +1054,28 @@ function draw_cam(cam)
   end
 
   _normcnt=cam:proj(v_vwcnt)
-	
-  local	vispolys=
-   cullnclip(v_wrld,v_view)
-   
-  --proj, including vrtx from clip
+
+  -- determine poly draw order
+  local vispolys={}
+  curinod=selnode and selnode[1] 
+   or getcurinod(c_3d.pos,curinod)
+  if curinod then
+   prepare_polys(v_wrld,v_view,
+    curinod,{},vispolys)
+  else
+   --no nodes structure, zsort
+   vispolys=shellsort(
+    cullnclip(v_wrld,v_view,vispolys)
+   )
+  end
+  
+  --proj,including vrtx from clip
   vrtx=c_3d:proj(v_view)
   c_3d.p_vrtx=vrtx
   -- and finally
   draw_polys(vispolys,vrtx)
   
-  -- draw normals
+  -- draw normals and stuffs
   pnormals=_normcnt
   cam.p_normcnt=pnormals
   
@@ -1171,75 +1192,86 @@ function draw_wire(_poly,col)
  end
 end
 
-function cullnclip(v_wrld,v_view)
+-- check visibility
+function cullnclip(v_wrld,v_view,polysorted)
  local vispolys={}
-
- -- check visibility
- for k,poly in pairs(mdl.polys) do
-  local norm=normals[k]
-  local vp=v_clone(v_wrld[poly[1]])
-  v_add(vp,c_3d.pos,-1)
-
-  -- backface culling
-  local back,wire,nod=
-   v_dot(norm,vp)<0,
-   render==r_wire,0
-   
-  if ed_tool.name==ed_node then
-   local p2nk,nodes=
-    poly2node[k],
-    mdl.nodes
-   -- new node
-   if (inarray(newelt,k)) nod=4
-   -- in a node
-   if (p2nk~=nil) nod=1
-   -- selected node
-   if (inarray(selnode,p2nk))nod=3
-   -- adjacent nodes
-   if selnode and nodes[selnode[1]] and
-    inarray(nodes[selnode[1]].conn,p2nk) then
-    nod=2
-   end
+ if #polysorted==0 then
+  --z sorted
+  for k,poly in pairs(mdl.polys) do
+   _cullnclip(v_wrld,v_view,k,poly,vispolys)
   end
-     
-  if back or wire or newnod or nod then
-   -- clipping
-   local polyidx={}
-   for i=1,#poly-1 do
-    polyidx[i]=poly[i]
-   end
-
-   local tc=t_clip({0,0,1},
-    {0,0,1},v_view,polyidx)
-   -- final polygon to render
-   if tc then
-    local z=0
-    for iv in all(tc) do
-     z=max(z,v_view[iv][3])
-    end
-    add(vispolys,{
-     poly=tc,
-     col=poly[#poly],
-     idx=k,
-     key=1/z, --maxz
-     vis=back,
-     nod=nod
-    })
-   end
+ else
+  --node sorted
+  for k in all(polysorted) do
+   local poly=mdl.polys[k]
+   _cullnclip(v_wrld,v_view,k,poly,vispolys)
   end
  end
  return vispolys
+end
+function _cullnclip(v_wrld,v_view,k,poly,vispolys)
+ local norm=normals[k]
+ local vp=v_clone(v_wrld[poly[1]])
+ v_add(vp,c_3d.pos,-1)
+
+ -- backface culling
+ local back,wire,nod=
+  v_dot(norm,vp)<0,
+  render==r_wire,0
+   
+ if ed_tool.name==ed_node then
+  local p2nk,nodes=
+   poly2node[k],
+   mdl.nodes
+  -- new node
+  if (inarray(newelt,k)) nod=5
+  -- in a node
+  if (p2nk~=nil) nod=1
+  -- selected node
+  if (inarray(selnode,p2nk))nod=4
+  if selnode then 
+   _nod=nodes[selnode[1]]
+   if _nod then
+    -- adjacent nodes
+    if (inarray(_nod.conn,p2nk)) nod=3
+    -- child nodes
+    if (inarray(_nod.child,p2nk)) nod=2
+   end
+  end
+ end
+     
+ if back or wire or newnod or nod then
+  -- clipping
+  local polyidx={}
+  for i=1,#poly-1 do
+   polyidx[i]=poly[i]
+  end
+
+  local tc=t_clip({0,0,1},
+   {0,0,1},v_view,polyidx)
+  -- final polygon to render
+  if tc then
+   local z=0
+   for iv in all(tc) do
+    z=max(z,v_view[iv][3])
+   end
+   add(vispolys,{
+    poly=tc,
+    col=poly[#poly],
+    idx=k,
+    key=1/z, --maxz
+    vis=back,
+    nod=nod
+   })
+  end
+ end
 end
 
 function draw_polys(vispolys,vrtx)
  
  local wirepolys,nodetool=
-  {{},{},{},{}},
+  tbl_parse"{{},{},{},{},{}}",
   ed_tool.name==ed_node
-
- -- sorting visible poly
- --shellsort(vispolys)
- heap_sort(vispolys)
 
  --light
  local lgt={1,-1,0} 
@@ -1276,7 +1308,7 @@ function draw_polys(vispolys,vrtx)
  fillp()
  -- additional node tool infos
 -- if (not nodetool) return
- local pcol={13,4,3,11}
+ local pcol=split"13,5,4,3,11"
  for i,col in pairs(pcol) do
   for _poly in all(wirepolys[i]) do
    draw_wire(_poly,col)
@@ -1315,7 +1347,8 @@ function draw_marker(cam,mrk_mdl)
 end
 
 function reset_tool()
- ivrtx,selface=nil,nil
+ ivrtx,selface=
+  nil,nil
  updstate=us_noselect
 end
 
@@ -1334,12 +1367,12 @@ end
 -->8
 --3d maths utils
 --from @fsouchu
-local m4ident=
+--[[local m4ident=
  {1,0,0,0, 
   0,1,0,0, 
   0,0,1,0, 
   0,0,0,1}
-
+]]--
 --[[function m_makerotx(a)
  return {
   1,0,     0,       0,
@@ -1504,7 +1537,7 @@ end
 
 -- triplefox with ciura's sequence
 -- https://www.lexaloffle.com/bbs/?tid=2477
---[[local shell_gaps={701,301,132,57,23,10,4,1} 
+local shell_gaps=split"701,301,132,57,23,10,4,1"
 function shellsort(a)
  for gap in all(shell_gaps) do
   if gap<=#a then
@@ -1520,11 +1553,13 @@ function shellsort(a)
    end
   end
  end
+ --not mandatory,but fluent
+ return a
 end
-]]--
+
 -- morgan3d
 -- https://www.lexaloffle.com/bbs/?tid=2477
-function heap_sort(data)
+--[[function heap_sort(data)
  local n=#data
 if (n==0) return
  for i=flr(n/2)+1,1,-1 do
@@ -1565,7 +1600,7 @@ if (n==0) return
   data[parent]=value
  end
 end
-
+]]--
 -->8
 --3d models
 local col1=0x54
@@ -1599,6 +1634,13 @@ function init_norm(_vrtx,_poly)
 end
 -->8
 -- utils @yourykiki
+--[[function logarray(arr)
+ color(7)
+ printh(#arr)
+ for k,v in pairs(arr) do
+  printh("k="..k..",v="..v)
+ end
+end]]--
 function add_all(a,b)
  for x in all(b) do
   add(a,x)
@@ -1923,29 +1965,29 @@ function add_face()
 end
 function add_node()
  local nodes,node=mdl.nodes,
-  {polys=newelt,conn={}}
+  {polys=newelt,conn={},child={}}
  add(nodes,node)
--- for elt in all(newelt) do
---  poly2node[elt]=#nodes
--- end
  newelt=nil
- refreshpoly2node()
+ refreshpolyinfo()
 end
 function del_node()
  for node in all(selnode) do
---  for k,p2n in pairs(poly2node) do
---   if p2n==node then
---    poly2node[k]=nil
---   end
---  end
+  --todo del conn in other nodes
   mdl.nodes[node]=nil
  end
- refreshpoly2node()
+ refreshpolyinfo()
 end
 function link_nodes(n1,n2)
  if n1!=n2 then
   togglelink(mdl.nodes[n1].conn,n2)
   togglelink(mdl.nodes[n2].conn,n1)
+ end
+end
+function link_child(parent,child)
+ if parent!=child then
+  togglelink(
+   mdl.nodes[parent].child,
+   child)
  end
 end
 function togglelink(conn,n)
@@ -1955,6 +1997,52 @@ function togglelink(conn,n)
   del(conn,n)
  end
 end
+
+function getcurinod(pos,pinod)
+ for i,n in pairs(nodeinfo) do
+  if (n:inbound(pos)) return i 
+ end
+ return pinod
+end
+
+
+function prepare_polys(v_wrld,
+  v_view,curinod,_w,polys)
+ _w[curinod]=true
+ local nodes=mdl.nodes
+ local node=nodes[curinod]
+ local conn=node.conn
+ 
+ -- get farthest node...
+ for inod in all(conn) do
+  if not _w[inod] then
+   prepare_polys(v_wrld,
+    v_view,inod,_w,polys)
+  end
+ end
+
+ -- and add clipped polys
+ -- (without sort)
+ local vispoly=cullnclip(
+  v_wrld,
+  v_view,
+  node.polys)
+ add_all(polys,vispoly)
+ 
+ -- add child (details in a node)
+ for child in all(node.child) do
+  --prepare with sort
+  local vispoly=shellsort(
+   cullnclip(
+    v_wrld,
+    v_view,
+    nodes[child].polys
+   )
+  )
+  add_all(polys,vispoly)
+ end
+end
+
 -->8
 -- export / import
 function export(mdl)
@@ -1995,15 +2083,47 @@ function import()
  mdl=_mdl
  pushmodel(mdl)
  --
- refreshpoly2node()
+ refreshpolyinfo()
 end
 
-function refreshpoly2node()
+function refreshpolyinfo()
  poly2node={}
  for k,node in pairs(mdl.nodes) do
   for ipol in all(node.polys) do
    poly2node[ipol]=k
   end
+ end
+ nodeinfo={}
+ for node in all(mdl.nodes) do
+  for k in all(node.polys) do
+   local poly=mdl.polys[k]
+   --for each vrtx,last is color
+   for i=1,#poly-1 do 
+    local v=mdl.vrtx[poly[i]]
+    minx=min(minx,v[1])
+    miny=min(miny,v[2])
+    minz=min(minz,v[3])
+    maxx=max(maxx,v[1])
+    maxy=max(maxy,v[2])
+    maxz=max(maxz,v[3])
+   end
+  end
+  add(nodeinfo,{
+   minx=minx,
+   miny=miny,
+   minz=minz,
+   maxx=maxx,
+   maxy=maxy,
+   maxz=maxz,
+   inbound=function(self,p)
+    return self.minx<=p[1]
+     and p[1]<=self.maxx 
+     and self.miny<=p[2]
+     and p[2]<=self.maxy
+     and self.minz<=p[3]
+     and p[3]<=self.maxz
+    end
+  })
  end
 end
 
