@@ -145,8 +145,8 @@ local delnodmnu={
  }
 }
 function _init()
- -- devkit mode
- poke(0x5f2d, 1)
+ -- devkit mode/mouse
+ poke(0x5f2d,1)
  -- init cam
  c_top,c_side,c_front,c_3d=
   init_cam("t",64, 8,top),
@@ -247,7 +247,7 @@ function init_cam(name,vx,vy,ax)
      add(_selnode,nod)
     end
    end
-   return _selnode
+   return _selface,_selnode
   end,
   selectelt=function(self,inearelt,listelt)
    local _selelt,sel={},self.sel
@@ -932,7 +932,7 @@ function update_node(mx,my,mb,dw)
   if mb&1==0 then
    -- store mx,my end
    c_current:endselect()
-   selnode=c_current:selectnode()
+   facenod,selnode=c_current:selectnode()
 
    -- check if node selected
    if selnode and #selnode>0 then
@@ -953,10 +953,10 @@ function update_node(mx,my,mb,dw)
   if m_pressed(mb,1) then
    --toggle link
    c_current:startselect(mx,my)
---   c_current:endselect()
-   local n=c_current:selectnode()
+   local f,n=c_current:selectnode()
    if #n>0 then
-    link_nodes(selnode[1],n[1])
+    link_nodes(selnode[1],facenod[1],
+     n[1],f[1])
    end
   elseif m_pressed(mb,2) and not ctx_mnu then
    ctx_mnu=init_context_mnu(mx,my,
@@ -967,7 +967,7 @@ function update_node(mx,my,mb,dw)
   if m_pressed(mb,1) then
    --toggle link
    c_current:startselect(mx,my)
-   local n=c_current:selectnode()
+   local f,n=c_current:selectnode()
    if #n>0 then
     link_child(selnode[1],n[1])
    end
@@ -1641,23 +1641,28 @@ end
   printh("k="..k..",v="..v)
  end
 end]]--
+
 function add_all(a,b)
  for x in all(b) do
   add(a,x)
  end
 end
+
 function inarray(array,val)
  for v in all(array) do
   if (v==val) return true
  end
  return false
 end
+
 function inkey(array,k)
  return array[k]~=nil 
 end
+
 function lerp(v0,v1,prc)
  return (1-prc)*v0+prc*v1
 end
+
 function isin2dvec(view,mx,my,
  arrayv2d)
 	local _mx,_my=
@@ -1678,6 +1683,7 @@ function isinside(vx,vy,mx1,mx2,my1,my2)
   mx1<=vx and vx<=mx2 and
   my1<=vy and vy<=my2
 end
+
 function update_actions(self,mx,my,mb,dw,x,y)
  x,y=x or 0,y or 0
  self.sel=0
@@ -1695,6 +1701,7 @@ function update_actions(self,mx,my,mb,dw,x,y)
   end
  end
 end
+
 function draw_icons(self,x,y)
  x,y=x or 0,y or 0
  for i,act in pairs(self.actions) do
@@ -1773,9 +1780,6 @@ function add_prism(nface,cam)
  add(lpolys,bot)
  add(top,lcol)
  add(lpolys,top)
-
--- transform(lvrtx,
---  pos[1],pos[2],pos[3],ry)
 
  local lwalls={}
  
@@ -1948,6 +1952,7 @@ function del_poly_vrtx(isv,poly)
   end
  end
 end
+
 function dec_poly_vrtx(isv,poly)
  for j=1,#poly-1 do
   local iv=poly[j]
@@ -1957,12 +1962,14 @@ function dec_poly_vrtx(isv,poly)
   end
  end
 end
+
 function add_face()
  local polys=mdl.polys
  add(polys,newelt)
  add(newelt,lastcol)
  newelt=nil
 end
+
 function add_node()
  local nodes,node=mdl.nodes,
   {polys=newelt,conn={},child={}}
@@ -1970,6 +1977,7 @@ function add_node()
  newelt=nil
  refreshpolyinfo()
 end
+
 function del_node()
  for node in all(selnode) do
   --todo del conn in other nodes
@@ -1977,25 +1985,40 @@ function del_node()
  end
  refreshpolyinfo()
 end
-function link_nodes(n1,n2)
+
+function link_nodes(n1,f1,n2,f2)
  if n1!=n2 then
-  togglelink(mdl.nodes[n1].conn,n2)
-  togglelink(mdl.nodes[n2].conn,n1)
+  local node1,node2=
+   mdl.nodes[n1],mdl.nodes[n2]
+  if tgl_link(node1.conn,n2) then
+   node1.prtl=f1
+  else 
+   node1.prtl=nil
+  end
+  if tgl_link(node2.conn,n1) then
+   node2.prtl=f2
+  else 
+   node2.prtl=nil
+  end
  end
 end
+
 function link_child(parent,child)
  if parent!=child then
-  togglelink(
+  tgl_link(
    mdl.nodes[parent].child,
    child)
  end
 end
-function togglelink(conn,n)
- if not inarray(conn,n) then
+
+function tgl_link(conn,n)
+ local notinarr =not inarray(conn,n)
+ if notinarr then
   add(conn,n)
  else
   del(conn,n)
  end
+ return notinarr
 end
 
 function getcurinod(pos,pinod)
@@ -2013,6 +2036,9 @@ function prepare_polys(v_wrld,
  local node=nodes[curinod]
  local conn=node.conn
  
+ -- calc proj
+ 
+  
  -- get farthest node...
  for inod in all(conn) do
   if not _w[inod] then
