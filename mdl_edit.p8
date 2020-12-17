@@ -1061,7 +1061,8 @@ function draw_cam(cam)
    or getcurinod(c_3d.pos,curinod)
   if curinod then
    prepare_polys(v_wrld,v_view,
-    curinod,{},vispolys)
+    curinod,{},vispolys,
+    {0,cam.view.w,0,cam.view.h})
   else
    --no nodes structure, zsort
    vispolys=shellsort(
@@ -1649,8 +1650,8 @@ function add_all(a,b)
 end
 
 function inarray(array,val)
- for v in all(array) do
-  if (v==val) return true
+ for k,v in pairs(array) do
+  if (v==val) return true,k
  end
  return false
 end
@@ -1972,7 +1973,11 @@ end
 
 function add_node()
  local nodes,node=mdl.nodes,
-  {polys=newelt,conn={},child={}}
+  {polys=newelt,
+   conn={},
+   child={},
+   prtl={}
+  }
  add(nodes,node)
  newelt=nil
  refreshpolyinfo()
@@ -1990,16 +1995,10 @@ function link_nodes(n1,f1,n2,f2)
  if n1!=n2 then
   local node1,node2=
    mdl.nodes[n1],mdl.nodes[n2]
-  if tgl_link(node1.conn,n2) then
-   node1.prtl=f1
-  else 
-   node1.prtl=nil
-  end
-  if tgl_link(node2.conn,n1) then
-   node2.prtl=f2
-  else 
-   node2.prtl=nil
-  end
+  tgl_link(node1.conn,n2,
+           node1.prtl,f1)
+  tgl_link(node2.conn,n1,
+           node2.prtl,f2)
  end
 end
 
@@ -2011,14 +2010,21 @@ function link_child(parent,child)
  end
 end
 
-function tgl_link(conn,n)
- local notinarr =not inarray(conn,n)
- if notinarr then
-  add(conn,n)
+function tgl_link(conn,n,prtl,f)
+ local inarr,offs=inarray(conn,n)
+ offs=inarr and offs or #conn+1
+ if not inarr then
+  conn[offs]=n
  else
-  del(conn,n)
+  conn[offs]=nil
  end
- return notinarr
+ if prtl then
+  if inarr then
+   prtl[offs]=nil
+  else
+   prtl[offs]=f
+  end
+ end
 end
 
 function getcurinod(pos,pinod)
@@ -2030,35 +2036,42 @@ end
 
 
 function prepare_polys(v_wrld,
-  v_view,curinod,_w,polys)
+  v_view,curinod,_w,polys,d_area)
  _w[curinod]=true
  local nodes=mdl.nodes
  local node=nodes[curinod]
  local conn=node.conn
  
- -- calc proj
- 
-  
+ local vispoly 
  -- get farthest node...
  for inod in all(conn) do
+  vispoly=cullnclip(
+   v_wrld,
+   v_view,
+   node.polys)
+  --already done ? 
   if not _w[inod] then
-   prepare_polys(v_wrld,
-    v_view,inod,_w,polys)
-  end
+   --potentially visible ?
+   --if node.prtl in vispoly then
+    --cull portal
+    --todo proj portal
+    --if proj inside d_area
+
+     prepare_polys(v_wrld,
+      v_view,inod,_w,polys)
+    --end
+   --end
+  end 
  end
 
  -- and add clipped polys
  -- (without sort)
- local vispoly=cullnclip(
-  v_wrld,
-  v_view,
-  node.polys)
  add_all(polys,vispoly)
  
  -- add child (details in a node)
  for child in all(node.child) do
   --prepare with sort
-  local vispoly=shellsort(
+  vispoly=shellsort(
    cullnclip(
     v_wrld,
     v_view,
