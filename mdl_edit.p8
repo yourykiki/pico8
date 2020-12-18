@@ -155,7 +155,7 @@ function _init()
   init_cam("3d",0, 8)
  c_3d.proj=proj3d
  -- load default model
- mdl=make_cube({0,0,0},0)
+ mdl=make_cube()
  pushmodel(mdl)
  update_normals(mdl)
  mrk_mdl=make_marker()
@@ -173,168 +173,161 @@ end
 
 function init_cam(name,vx,vy,ax)
  local camdst=16
- return {
-  name=name,
-  pos={0,4,-camdst},
-  roty=0,
-  ang=0.25,vang=0,camdst=camdst,
-  view={w=64,h=60,x=vx,y=vy,
-   tw=64,th=60,tx=vx,ty=vy},
-  m={},
-  focus=false,zoom=100,
-  ax=ax,
-  sel={x1=0,y1=0,x2=0,y2=0,a=false},
-  p_vrtx={},
-  p_normcnt={},
-  upd_m=function(self)
-   local d=self.camdst
-   self.pos[1]=-d*cos(self.ang)
-   self.pos[3]= d*sin(self.ang)
-
-   local m_vw=
-    make_m_from_v_angle(v_up,self.ang)
-   m_vw[13],m_vw[14],m_vw[15]=
-    self.pos[1],self.pos[2],self.pos[3]
-   m_qinv(m_vw)
-   self.m=m_vw
-  end,
-  proj=proj2d,
-  setfocus=function(self,mx,my)
-   local v=self.view
-   self.focus=
-    v.x<mx and mx<=(v.x+v.w) and
-    v.y<my and my<=(v.y+v.h)
-  end,
-  drawsel=function(self)
-   local sel=self.sel
-   if sel.a then
-    fillp(0x5a5a)
-    rect(sel.x1,sel.y1,
-     sel.x2,sel.y2,0x57)
-    fillp()
-   end
-  end,
-  draworig=function(self)
-   local pos,w,h=
-    self.pos,self.view.w,self.view.h
-   local x,y=
-    mid(1,w/2+pos[1],w-2),
-    mid(1,h/2+pos[2],h-2)
-   line(x,y,x,y,7)
-  end,
-  startselect=function(self,mx,my)
-   local sel,view=self.sel,self.view
-   sel.x1,sel.y1,
-   sel.x2,sel.y2, sel.a=
-    mx-view.x,my-view.y,
-    mx-view.x,my-view.y, true
-  end,
-  updselect=function(self,mx,my)
-   local sel,view=self.sel,self.view
-   sel.x2,sel.y2=mx-view.x,my-view.y
-  end,
-  endselect=function(self)
-   self.sel.a=false
-   self:sortsel()
-  end,
-  selectnode=function(self)
-   local _selface=self:selectelt(
-    inearnormal,self.p_normcnt)
-   local _selnode={}
-   for iface in all(_selface) do
-    local nod=poly2node[iface] 
-    if not inarray(_selnode,nod)then
-     add(_selnode,nod)
-    end
-   end
-   return _selface,_selnode
-  end,
-  selectelt=function(self,inearelt,listelt)
-   local _selelt,sel={},self.sel
-   if sel.x1==sel.x2 and
-      sel.y1==sel.y2 then
-    return {inearelt}
-   end
-   for k,v in pairs(listelt) do
-    if self:vinsel(v) then
-     add(_selelt,k)
-    end
-   end
-   return _selelt
-  end,
-  vinsel=function(self,v)
-   local sel,vx,vy=self.sel,
-    v[1],v[2]   
-   return isinside(vx,vy,
-    sel.x1,sel.x2,sel.y1,sel.y2)
-  end,
-  sortsel=function(self)
-   local sel=self.sel
-   if sel.x1>sel.x2 then
-    sel.x1,sel.x2=sel.x2,sel.x1
-   end
-   if sel.y1>sel.y2 then
-    sel.y1,sel.y2=sel.y2,sel.y1
-   end
-  end,
-  moveselvrtx=function(self,bl,br,bu,bd,vrtx)
-   local ax=self.ax
-   if (not ax) return 
-   for i in all(ivrtx) do
-    if (bl) vrtx[i][ax[1]]-=1
-    if (br) vrtx[i][ax[1]]+=1
-    if (bu) vrtx[i][ax[2]]+=1
-    if (bd) vrtx[i][ax[2]]-=1
-   end
-   if bl or br or bu or db then
-    pushmodel(mdl)
-   end
-  end,
-  movedragselvrtx=function(self,dx,dy,vrtx)
-   if (not ax) return
-   for i in all(ivrtx) do
-    vrtx[i][ax[1]]+=dx
-    vrtx[i][ax[2]]-=dy
-   end
-  end,
-  nearselvrtx=function(self,mx,my)
-   local res,view=false,self.view
-   local _mx,_my=
-    mx-view.x,my-view.y
-  	local mx1,mx2,my1,my2=
-	   _mx-3,_mx+3,_my-3,_my+3
-   for i in all(ivrtx) do
-    local v=self.p_vrtx[i]
-    if v then
-     res=res or (
-      isinside(v[1],v[2],
-	      mx1,mx2,my1,my2))
-    end
-   end
-   return res
-  end,
-  near_vrtx=function(self,mx,my)
-   inearvrtx=
-    isin2dvec(
-     self.view,
-     mx,my,
-     self.p_vrtx)
-  end,
-  near_normals=function(self,mx,my)
-   inearnormal=
-    isin2dvec(
-     self.view,
-     mx,my,
-     self.p_normcnt)
-  end,
-  update=function(self)
-   local view=self.view
-   view.w=lerp(view.w,view.tw,0.6)
-   view.h=lerp(view.h,view.th,0.6)
-   view.x=lerp(view.x,view.tx,0.6)
-   view.y=lerp(view.y,view.ty,0.6)
+ local res=tbl_parse("{roty=0,ang=0.25,vang=0,m={},focus=false,zoom=100,sel={x1=0,y1=0,x2=0,y2=0,a=false},p_vrtx={},p_normcnt={},view={w=64,h=60,x="..vx..",y="..vy..",tw=64,th=60,tx="..vx..",ty="..vy.."},pos={0,4,-"..camdst.."}}")
+ res.name=name
+ res.camdst=camdst
+ res.ax=ax
+ res.upd_m=function(self)
+  local d=self.camdst
+  self.pos[1]=-d*cos(self.ang)
+  self.pos[3]= d*sin(self.ang)
+  local m_vw=
+   make_m_from_v_angle(v_up,self.ang)
+  m_vw[13],m_vw[14],m_vw[15]=
+   self.pos[1],self.pos[2],self.pos[3]
+  m_qinv(m_vw)
+  self.m=m_vw
+ end
+ res.proj=proj2d
+ res.setfocus=function(self,mx,my)
+  local v=self.view
+  self.focus=
+   v.x<mx and mx<=(v.x+v.w) and
+   v.y<my and my<=(v.y+v.h)
+ end
+ res.drawsel=function(self)
+  local sel=self.sel
+  if sel.a then
+   fillp(0x5a5a)
+   rect(sel.x1,sel.y1,
+    sel.x2,sel.y2,0x57)
+   fillp()
   end
- }
+ end
+ res.draworig=function(self)
+  local pos,w,h=
+   self.pos,self.view.w,self.view.h
+  local x,y=
+   mid(1,w/2+pos[1],w-2),
+   mid(1,h/2+pos[2],h-2)
+  line(x,y,x,y,7)
+ end
+ res.startselect=function(self,mx,my)
+  local sel,view=self.sel,self.view
+  sel.x1,sel.y1,
+  sel.x2,sel.y2, sel.a=
+   mx-view.x,my-view.y,
+   mx-view.x,my-view.y, true
+ end
+ res.updselect=function(self,mx,my)
+  local sel,view=self.sel,self.view
+  sel.x2,sel.y2=mx-view.x,my-view.y
+ end
+ res.endselect=function(self)
+  self.sel.a=false
+  self:sortsel()
+ end
+ res.selectnode=function(self)
+  local _selface=self:selectelt(
+   inearnormal,self.p_normcnt)
+  local _selnode={}
+  for iface in all(_selface) do
+   local nod=poly2node[iface] 
+   if not inarray(_selnode,nod)then
+    add(_selnode,nod)
+   end
+  end
+  return _selface,_selnode
+ end
+ res.selectelt=function(self,inearelt,listelt)
+  local _selelt,sel={},self.sel
+  if sel.x1==sel.x2 and
+     sel.y1==sel.y2 then
+   return {inearelt}
+  end
+  for k,v in pairs(listelt) do
+   if self:vinsel(v) then
+    add(_selelt,k)
+   end
+  end
+  return _selelt
+ end
+ res.vinsel=function(self,v)
+  local sel,vx,vy=self.sel,
+   v[1],v[2]   
+  return isinside(vx,vy,
+   sel.x1,sel.x2,sel.y1,sel.y2)
+ end
+ res.sortsel=function(self)
+  local sel=self.sel
+  if sel.x1>sel.x2 then
+   sel.x1,sel.x2=sel.x2,sel.x1
+  end
+  if sel.y1>sel.y2 then
+   sel.y1,sel.y2=sel.y2,sel.y1
+  end
+ end
+ res.moveselvrtx=function(self,bl,br,bu,bd,vrtx)
+  local ax=self.ax
+  if (not ax) return 
+  for i in all(ivrtx) do
+   if (bl) vrtx[i][ax[1]]-=1
+   if (br) vrtx[i][ax[1]]+=1
+   if (bu) vrtx[i][ax[2]]+=1
+   if (bd) vrtx[i][ax[2]]-=1
+  end
+  if bl or br or bu or db then
+   pushmodel(mdl)
+  end
+ end
+ res.movedragselvrtx=function(self,dx,dy,vrtx)
+  if (not ax) return
+  for i in all(ivrtx) do
+   vrtx[i][ax[1]]+=dx
+   vrtx[i][ax[2]]-=dy
+  end
+ end
+ res.nearselvrtx=function(self,mx,my)
+  local res,view=false,self.view
+  local _mx,_my=
+   mx-view.x,my-view.y
+ 	local mx1,mx2,my1,my2=
+   _mx-3,_mx+3,_my-3,_my+3
+  for i in all(ivrtx) do
+   local v=self.p_vrtx[i]
+   if v then
+    res=res or (
+     isinside(v[1],v[2],
+      mx1,mx2,my1,my2))
+   end
+  end
+  return res
+ end
+ res.near_vrtx=function(self,mx,my)
+  inearvrtx=
+   isin2dvec(
+    self.view,
+    mx,my,
+    self.p_vrtx)
+ end
+ res.near_normals=function(self,mx,my)
+  inearnormal=
+   isin2dvec(
+    self.view,
+    mx,my,
+    self.p_normcnt)
+ end
+ res.update=function(self)
+  local view=self.view
+  view.w,view.h,view.x,view.y=
+   lerp(view.w,view.tw,0.6),
+   lerp(view.h,view.th,0.6),
+   lerp(view.x,view.tx,0.6),
+   lerp(view.y,view.ty,0.6)
+  view.halfw,view.halfh=
+   view.w/2,view.h/2
+ end
+ return res
 end
 
 function init_modal(msg,fnc,w,h)
@@ -743,22 +736,19 @@ function proj2d(self,vrtx)
  return vert
 end
 function proj3d(self,vrtx)
- local vert,ww,hh,zm=
-  {},self.view.w/2,
-  self.view.h/2,
-  1--use camdst instead
+ local vert,ww,hh=
+  {},self.view.halfw,
+  self.view.halfh
  
- for i=1,#vrtx do 
-  local v=vrtx[i]
+ for i,v in pairs(vrtx) do 
   local w=ww/v[3]
   vert[i]={
-   ww+w*v[1]*zm,
-   hh-w*v[2]*zm
+   ww+w*v[1],
+   hh-w*v[2]
   }
  end
  return vert
 end
-
 
 function update_vrtx(mx,my,mb,dw)
  -- btn state
@@ -1061,10 +1051,9 @@ function draw_cam(cam)
    or getcurinod(c_3d.pos,curinod)
   if curinod then
    prepare_polys(v_wrld,v_view,
-    curinod,{},vispolys,
-    {0,cam.view.w,0,cam.view.h})
+    curinod,{},vispolys)--cam.view)
   else
-   --no nodes structure, zsort
+   --no nodes structure, z-sort
    vispolys=shellsort(
     cullnclip(v_wrld,v_view,vispolys)
    )
@@ -1103,6 +1092,7 @@ function draw_cam(cam)
      pnormals,v_vwcnt,13,poly2node,inkey)
    end
   end
+  --print("#vispolys "..#vispolys)
  else 
   -- 2d wire rendering
   vrtx=cam:proj(vrtx)
@@ -1240,7 +1230,7 @@ function _cullnclip(v_wrld,v_view,k,poly,vispolys)
    end
   end
  end
-     
+
  if back or wire or newnod or nod then
   -- clipping
   local polyidx={}
@@ -1606,14 +1596,12 @@ end
 --3d models
 local col1=0x54
  
-function make_cube(pos,ry)
- local mdlstr="{polys={{1,2,3,4,84},{5,6,7,8,84},{8,7,2,1,84},{4,3,6,5,84},{7,6,3,2,84},{4,5,8,1,84}},walls={},vrtx={{-8,0,-4},{-6,8,-4},{6,8,-4},{8,0,-4},{8,0,4},{6,8,4},{-6,8,4},{-8,0,4}},nodes={}}"
- return tbl_parse(mdlstr)
+function make_cube()
+ return tbl_parse("{polys={{1,2,3,4,84},{5,6,7,8,84},{8,7,2,1,84},{4,3,6,5,84},{7,6,3,2,84},{4,5,8,1,84}},walls={},vrtx={{-8,0,-4},{-6,8,-4},{6,8,-4},{8,0,-4},{8,0,4},{6,8,4},{-6,8,4},{-8,0,4}},nodes={}}")
 end
 
 function make_marker()
- local mdlstr="{vrtx={{0,0,0},{10,0,0},{0,10,0},{0,0,10}},lins={{1,2},{1,3},{1,4}}}"
- return tbl_parse(mdlstr)
+ return tbl_parse("{vrtx={{0,0,0},{10,0,0},{0,10,0},{0,0,10}},lins={{1,2},{1,3},{1,4}}}")
 end
 
 function init_norm(_vrtx,_poly)
@@ -2034,38 +2022,41 @@ function getcurinod(pos,pinod)
  return pinod
 end
 
-
 function prepare_polys(v_wrld,
-  v_view,curinod,_w,polys,d_area)
+  v_view,curinod,_w,polys)--d_area
  _w[curinod]=true
  local nodes=mdl.nodes
  local node=nodes[curinod]
- local conn=node.conn
- 
- local vispoly 
- -- get farthest node...
- for inod in all(conn) do
-  vispoly=cullnclip(
-   v_wrld,
-   v_view,
-   node.polys)
-  --already done ? 
-  if not _w[inod] then
-   --potentially visible ?
-   --if node.prtl in vispoly then
-    --cull portal
-    --todo proj portal
-    --if proj inside d_area
 
-     prepare_polys(v_wrld,
-      v_view,inod,_w,polys)
-    --end
-   --end
+ -- get farthest node...
+ for k,inod in pairs(node.conn) do
+  if not _w[inod] then
+-- portal cull start --
+--   portal=cullnclip(
+--    v_wrld,
+--    v_view,
+--    {node.prtl[k]})
+   --potentially visible ?
+--   if #portal>0 then
+--    local prtlvrtx={}
+--    for v in all(portal.poly) do
+--     add(prtlvrtx,vrtx[v])
+--    end
+--    c_3d:proj(prtlvrtx)
+    --todo portal inside d_area
+-- portal cull end   --
+    prepare_polys(v_wrld,
+     v_view,inod,_w,polys)
+--   end
   end 
  end
 
  -- and add clipped polys
  -- (without sort)
+ local vispoly=cullnclip(
+  v_wrld,
+  v_view,
+  node.polys)
  add_all(polys,vispoly)
  
  -- add child (details in a node)
